@@ -8,6 +8,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import com.example.R
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -78,6 +79,9 @@ fun attemptAutoSignIn(
             } else {
                 onUnauthenticated()
             }
+        } catch (e: NoCredentialException) {
+            Log.d(TAG, "No authorized Google credentials stored for silent sign-in", e)
+            onUnauthenticated()
         } catch (_: Exception) {
             onUnauthenticated()
         }
@@ -122,6 +126,9 @@ fun onGoogleSignInClicked(
             } else {
                 onAuthError("Unexpected credential returned by Google Sign-In.")
             }
+        } catch (e: NoCredentialException) {
+            Log.w(TAG, "No Google account available on device: ${e.message}", e)
+            onAuthError("No Google account found on this device. Please add a Google account in Settings or continue as Guest.")
         } catch (e: GetCredentialCancellationException) {
             Log.w(TAG, "Google Sign-In cancelled or dismissed: ${e.message}", e)
             onAuthCancelled()

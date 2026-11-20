@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
@@ -51,10 +53,14 @@ import com.example.data.model.DiscoveryCollection
 import com.example.data.model.ResolutionTier
 import com.example.data.model.SearchFilters
 import com.example.data.model.SearchSort
+import com.example.data.model.UiStyleMode
 import com.example.data.model.Wallpaper
 import com.example.data.model.WallpaperCategory
 import com.example.ui.components.EmptyStatePanel
+import com.example.ui.components.TactileSurface
 import com.example.ui.components.WallpaperGridCard
+import com.example.ui.components.glassSpecularBorder
+import com.example.ui.theme.LocalUiStyleMode
 
 @Composable
 fun ExploreSearchScreen(
@@ -77,10 +83,12 @@ fun ExploreSearchScreen(
     onResetFilters: () -> Unit,
     onOpenWallpaper: (Wallpaper) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onOpenAiStudioWithPrompt: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
     val hasActiveFilter = filters != SearchFilters()
+    val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -313,9 +321,11 @@ fun ExploreSearchScreen(
                         val selected = filters.colorFamily == colorFamily
                         Surface(
                             color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                            else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = if (isGlass) 0.72f else 1f),
                             shape = RoundedCornerShape(20.dp),
-                            tonalElevation = if (selected) 3.dp else 1.dp,
+                            border = glassSpecularBorder(),
+                            tonalElevation = if (isGlass) 0.dp else if (selected) 3.dp else 1.dp,
+                            shadowElevation = if (isGlass) 4.dp else 0.dp,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .clickable {
@@ -361,8 +371,9 @@ fun ExploreSearchScreen(
                         val selected = filters.category == cat
                         Surface(
                             color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainer,
+                            else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (isGlass) 0.72f else 1f),
                             shape = RoundedCornerShape(22.dp),
+                            border = glassSpecularBorder(),
                             modifier = Modifier
                                 .width(152.dp)
                                 .clip(RoundedCornerShape(22.dp))
@@ -388,6 +399,71 @@ fun ExploreSearchScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Gemini AI Studio Prompt Integration Banner
+        item {
+            TactileSurface(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.68f),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable {
+                        focusManager.clearFocus()
+                        onOpenAiStudioWithPrompt(filters.query)
+                    }
+                    .testTag("explore_ai_studio_banner")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.AutoAwesome,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiary
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (filters.query.isNotBlank()) {
+                                "Create \"${filters.query.trim()}\" in AI Studio"
+                            } else {
+                                "Create Custom Artwork with Gemini AI"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Generate 4K wallpapers, remix styles, or ask the Curator",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                        contentDescription = "Launch AI Studio",
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
                 }
             }
         }
@@ -426,11 +502,19 @@ fun ExploreSearchScreen(
         if (results.isEmpty()) {
             item {
                 Box(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    val hasQuery = filters.query.isNotBlank()
                     EmptyStatePanel(
                         title = "No matching canvases",
-                        subtitle = "Try clearing a resolution or color filter to explore all ${WallpaperCatalog.allWallpapers.size} wallpapers.",
-                        actionLabel = "Reset all filters",
-                        onAction = onResetFilters
+                        subtitle = if (hasQuery) {
+                            "No preset matched \"${filters.query.trim()}\". Generate it in Gemini AI Studio or reset filters."
+                        } else {
+                            "Try clearing a resolution or color filter to explore all ${WallpaperCatalog.allWallpapers.size} wallpapers."
+                        },
+                        actionLabel = if (hasQuery) "Create in AI Studio" else "Reset all filters",
+                        onAction = {
+                            if (hasQuery) onOpenAiStudioWithPrompt(filters.query)
+                            else onResetFilters()
+                        }
                     )
                 }
             }

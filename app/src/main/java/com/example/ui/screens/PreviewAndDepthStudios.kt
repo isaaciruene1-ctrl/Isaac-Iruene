@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Paint as AndroidPaint
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -11,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,28 +27,37 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FormatAlignCenter
-import androidx.compose.material.icons.rounded.FormatAlignLeft
-import androidx.compose.material.icons.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -74,6 +86,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -94,22 +107,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
 import com.example.data.catalog.WallpaperCatalog
 import com.example.data.media.WallpaperTarget
 import com.example.data.model.DiscoveryCollection
 import com.example.data.model.Wallpaper
 import com.example.engine.depth.ClockHorizontalAlign
+import com.example.engine.depth.DepthGenerativeFillEngine
+import com.example.engine.depth.GenerativeFillMood
+import com.example.ui.components.ClockBoundingOverlay
+import com.example.ui.components.ClockDesignConfig
+import com.example.ui.components.HyperOsClockCategory
 import com.example.ui.components.HyperOsClockFace
 import com.example.ui.components.HyperOsClockFaceThumbnail
 import com.example.ui.components.HyperOsClockFinish
@@ -117,6 +140,7 @@ import com.example.ui.components.HyperOsClockFont
 import com.example.ui.components.HyperOsLockClock
 import com.example.ui.components.WallpaperAsyncImage
 import com.example.ui.viewmodel.DepthStudioUiState
+import com.example.ui.viewmodel.GenerativeFillUiState
 import kotlin.math.roundToInt
 
 enum class PreviewMode(val label: String) {
@@ -139,8 +163,7 @@ fun PreviewStudioScreen(
     modifier: Modifier = Modifier
 ) {
     var mode by remember { mutableStateOf(PreviewMode.HOME_SCREEN) }
-    var clockFace by remember { mutableStateOf(HyperOsClockFace.MAGAZINE_STACKED) }
-    var clockFont by remember { mutableStateOf(clockFace.recommendedFont) }
+    var clockConfig by remember { mutableStateOf(ClockDesignConfig(scale = 0.85f)) }
     var showWidgets by remember { mutableStateOf(true) }
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
@@ -389,12 +412,16 @@ fun PreviewStudioScreen(
                     ) {
                         Icon(Icons.Rounded.Lock, contentDescription = null, tint = Color.White)
                         HyperOsLockClock(
-                            face = clockFace,
-                            font = clockFont,
-                            finish = HyperOsClockFinish.DUO_GRADIENT,
+                            face = clockConfig.face,
+                            font = clockConfig.font,
+                            finish = clockConfig.finish,
                             primaryColor = Color.White,
                             secondaryColor = secondaryTint,
-                            scaleFactor = 0.85f
+                            weightLevel = clockConfig.weightLevel,
+                            scaleFactor = clockConfig.scale,
+                            widthScale = clockConfig.widthScale,
+                            heightScale = clockConfig.heightScale,
+                            opacity = clockConfig.opacity
                         )
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -483,14 +510,39 @@ fun PreviewStudioScreen(
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(HyperOsClockFace.entries) { face ->
                                     FilterChip(
-                                        selected = clockFace == face,
+                                        selected = clockConfig.face == face,
                                         onClick = {
-                                            clockFace = face
-                                            clockFont = face.recommendedFont
+                                            clockConfig = clockConfig.copy(
+                                                face = face,
+                                                font = face.recommendedFont
+                                            )
                                         },
                                         label = { Text(face.label) }
                                     )
                                 }
+                            }
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(HyperOsClockFinish.entries) { fin ->
+                                    FilterChip(
+                                        selected = clockConfig.finish == fin,
+                                        onClick = { clockConfig = clockConfig.copy(finish = fin) },
+                                        label = { Text(fin.label, style = MaterialTheme.typography.labelSmall) }
+                                    )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("Opacity", style = MaterialTheme.typography.labelMedium)
+                                Slider(
+                                    value = clockConfig.opacity,
+                                    onValueChange = { clockConfig = clockConfig.copy(opacity = it) },
+                                    valueRange = 0.25f..1.0f,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text("${(clockConfig.opacity * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
                             }
                         }
 
@@ -539,9 +591,15 @@ fun PreviewStudioScreen(
 fun DepthStudioScreen(
     initialWallpaper: Wallpaper,
     depthState: DepthStudioUiState,
+    fillState: GenerativeFillUiState,
+    framingResetVersion: Int,
     isApplying: Boolean,
+    allowGenerativeFill: Boolean = true,
     onLoadWallpaper: (Wallpaper, Boolean) -> Unit,
     onPickCustomPhoto: (Uri, Boolean) -> Unit,
+    onApplyGenerativeFill: (Float, Float, Float, Float, Float, GenerativeFillMood, String) -> Unit,
+    onUndoGenerativeFill: () -> Unit,
+    onDismissFillError: () -> Unit,
     onBack: () -> Unit,
     onApplyWallpaper: (Wallpaper, WallpaperTarget) -> Unit,
     onApplyCustomBitmapWallpaper: (Bitmap, WallpaperTarget) -> Unit,
@@ -557,21 +615,20 @@ fun DepthStudioScreen(
 
     var showControls by remember { mutableStateOf(true) }
     var activeTab by remember { mutableStateOf(DepthSectionTab.SUBJECT) }
+    var selectedClockCategory by remember { mutableStateOf<HyperOsClockCategory?>(null) }
 
     var depthOverlapEnabled by remember { mutableStateOf(true) }
-    var clockFace by remember { mutableStateOf(HyperOsClockFace.MAGAZINE_STACKED) }
-    var clockFont by remember { mutableStateOf(clockFace.recommendedFont) }
-    var clockFinish by remember { mutableStateOf(HyperOsClockFinish.DUO_GRADIENT) }
-    var clockPlacement by remember { mutableFloatStateOf(0.14f) }
-    var clockScale by remember { mutableFloatStateOf(1.0f) }
-    var clockAlignment by remember { mutableStateOf(ClockHorizontalAlign.CENTER) }
-    var useLiveTime by remember { mutableStateOf(false) }
-    var showDateAndWeather by remember { mutableStateOf(true) }
+    var clockConfig by remember { mutableStateOf(ClockDesignConfig()) }
+    var isClockEditing by remember { mutableStateOf(false) }
+    var clockMeasuredSize by remember { mutableStateOf(IntSize.Zero) }
 
     var clockColorIndex by remember { mutableIntStateOf(0) }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
+    var selectedFillMood by remember { mutableStateOf(GenerativeFillMood.SEAMLESS_SCENE) }
+    var customFillCue by remember { mutableStateOf("") }
 
     var showApplyDialog by remember { mutableStateOf(false) }
     var lastAutoAppliedKey by remember { mutableStateOf<String?>(null) }
@@ -587,6 +644,13 @@ fun DepthStudioScreen(
         }
     }
 
+    LaunchedEffect(framingResetVersion) {
+        if (framingResetVersion > 0) {
+            panOffset = Offset.Zero
+            zoomScale = 1.0f
+        }
+    }
+
     LaunchedEffect(activeWallpaper.id, customPhotoUri) {
         val uri = customPhotoUri
         if (uri != null) {
@@ -599,8 +663,11 @@ fun DepthStudioScreen(
     LaunchedEffect(depthState) {
         if (depthState is DepthStudioUiState.Ready && depthState.key != lastAutoAppliedKey) {
             lastAutoAppliedKey = depthState.key
-            clockPlacement = depthState.result.recommendedClockTopFraction
-            clockAlignment = depthState.result.recommendedAlign
+            clockConfig = clockConfig.copy(
+                placementY = depthState.result.recommendedClockTopFraction,
+                alignment = depthState.result.recommendedAlign,
+                offsetXFraction = 0f
+            )
             clockColorIndex = 0
         }
     }
@@ -626,26 +693,70 @@ fun DepthStudioScreen(
         else -> null
     }
 
+    val frameSpec = remember(fullBitmap, canvasSize, zoomScale, panOffset) {
+        val bmp = fullBitmap ?: return@remember null
+        if (canvasSize.width <= 0 || canvasSize.height <= 0) return@remember null
+        DepthGenerativeFillEngine.computeFrameSpec(
+            sourceWidth = bmp.width,
+            sourceHeight = bmp.height,
+            viewportWidth = canvasSize.width.toFloat(),
+            viewportHeight = canvasSize.height.toFloat(),
+            zoomScale = zoomScale,
+            panOffsetX = panOffset.x,
+            panOffsetY = panOffset.y
+        )
+    }
+    val hasUncoveredBorders = allowGenerativeFill && frameSpec?.hasUncoveredBorders == true
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val density = LocalDensity.current
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color(0xFF101218))
             .onSizeChanged { canvasSize = it }
     ) {
-        // Layer 1: Full-resolution wallpaper bitmap (or async full-res fallback during load)
+        // Subtle canvas grid shown beneath uncovered margins when zoomed out or panned past edge
+        if (hasUncoveredBorders) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cell = 24.dp.toPx()
+                val darkTile = Color(0xFF171A22)
+                val lightTile = Color(0xFF1E222D)
+                val cols = (size.width / cell).toInt() + 1
+                val rows = (size.height / cell).toInt() + 1
+                for (r in 0..rows) {
+                    for (c in 0..cols) {
+                        val color = if ((r + c) % 2 == 0) darkTile else lightTile
+                        drawRect(
+                            color = color,
+                            topLeft = Offset(c * cell, r * cell),
+                            size = Size(cell, cell)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Layer 1: Full-resolution wallpaper bitmap (supports edge panning; tapping outside clock hides handles)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) { showControls = !showControls }
+                ) {
+                    if (isClockEditing) {
+                        isClockEditing = false
+                    } else {
+                        showControls = !showControls
+                    }
+                }
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         panOffset = Offset(
-                            x = (panOffset.x + dragAmount.x).coerceIn(-280f, 280f),
-                            y = (panOffset.y + dragAmount.y).coerceIn(-340f, 340f)
+                            x = (panOffset.x + dragAmount.x).coerceIn(-520f, 520f),
+                            y = (panOffset.y + dragAmount.y).coerceIn(-680f, 680f)
                         )
                     }
                 }
@@ -682,28 +793,49 @@ fun DepthStudioScreen(
             }
         }
 
-        // Layer 2: Customizable Clock Layer behind the real subject cutout
-        BoxWithConstraints(
+        // Compute aligned full-bleed clock vertical & horizontal offset once for Layer 2 & Layer 3.5 overlay
+        val viewportHeightDp = with(density) { canvasSize.height.toDp() }
+        val minClockTop = (statusTop + 16.dp).coerceAtLeast(52.dp)
+        val maxClockTop = if (viewportHeightDp > minClockTop) {
+            (viewportHeightDp * 0.44f).coerceAtLeast(minClockTop)
+        } else {
+            minClockTop
+        }
+        val clockTopPadding = if (viewportHeightDp > 0.dp) {
+            (viewportHeightDp * clockConfig.placementY).coerceIn(minClockTop, maxClockTop)
+        } else {
+            minClockTop
+        }
+        val centerOffsetXPx = canvasSize.width * clockConfig.offsetXFraction
+
+        // Layer 2: Customizable HyperOS Clock Layer behind the real subject cutout
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
         ) {
-            val topPadding = (maxHeight * clockPlacement).coerceIn(52.dp, maxHeight * 0.44f)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = topPadding)
+                    .padding(top = clockTopPadding)
+                    .graphicsLayer {
+                        translationX = centerOffsetXPx
+                    }
+                    .onSizeChanged { clockMeasuredSize = it }
             ) {
                 HyperOsLockClock(
-                    face = clockFace,
-                    font = clockFont,
-                    finish = clockFinish,
+                    face = clockConfig.face,
+                    font = clockConfig.font,
+                    finish = clockConfig.finish,
                     primaryColor = selectedClockColor,
                     secondaryColor = secondaryBlendColor,
-                    scaleFactor = clockScale,
-                    alignment = clockAlignment,
-                    useLiveTime = useLiveTime,
-                    showDateAndWeather = showDateAndWeather
+                    weightLevel = clockConfig.weightLevel,
+                    scaleFactor = clockConfig.scale,
+                    widthScale = clockConfig.widthScale,
+                    heightScale = clockConfig.heightScale,
+                    opacity = clockConfig.opacity,
+                    alignment = clockConfig.alignment,
+                    useLiveTime = clockConfig.useLiveTime,
+                    showDateAndWeather = clockConfig.showDateAndWeather
                 )
             }
         }
@@ -724,6 +856,89 @@ fun DepthStudioScreen(
                         translationY = panOffset.y
                     }
             )
+        }
+
+        // Layer 3.5: Tap-to-Reveal Clock Bounding Frame (handles stay above subject cutout so edges are always draggable)
+        if (!isClockEditing && canvasSize.width > 0) {
+            val hitW = if (clockMeasuredSize.width > 0) {
+                with(density) { (clockMeasuredSize.width * clockConfig.widthScale).toDp() }.coerceIn(170.dp, 350.dp)
+            } else 240.dp
+            val hitH = if (clockMeasuredSize.height > 0) {
+                with(density) { (clockMeasuredSize.height * clockConfig.heightScale).toDp() }.coerceIn(100.dp, 300.dp)
+            } else 160.dp
+            val hitLeftPx = ((canvasSize.width - with(density) { hitW.toPx() }) * 0.5f + centerOffsetXPx)
+                .coerceIn(0f, (canvasSize.width - with(density) { hitW.toPx() }).coerceAtLeast(0f))
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            x = hitLeftPx.roundToInt(),
+                            y = with(density) { clockTopPadding.toPx() }.roundToInt()
+                        )
+                    }
+                    .size(width = hitW, height = hitH)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { isClockEditing = true }
+                    .testTag("clock_tap_hit_box")
+            )
+        } else if (isClockEditing && canvasSize.width > 0) {
+            ClockBoundingOverlay(
+                topOffsetDp = clockTopPadding,
+                centerOffsetXPx = centerOffsetXPx,
+                clockWidthPx = clockMeasuredSize.width,
+                clockHeightPx = clockMeasuredSize.height,
+                viewportSize = canvasSize,
+                config = clockConfig,
+                onUpdateConfig = { clockConfig = it },
+                onResetFrame = {
+                    val readyResult = (depthState as? DepthStudioUiState.Ready)?.result
+                    clockConfig = clockConfig.copy(
+                        scale = 1.0f,
+                        widthScale = 1.0f,
+                        heightScale = 1.0f,
+                        offsetXFraction = 0f,
+                        placementY = readyResult?.recommendedClockTopFraction ?: 0.14f,
+                        alignment = readyResult?.recommendedAlign ?: ClockHorizontalAlign.CENTER
+                    )
+                },
+                onDoneEditing = { isClockEditing = false }
+            )
+        }
+
+        // Floating Canvas Progress Pill while Gemini AI extends uncovered borders
+        AnimatedVisibility(
+            visible = fillState is GenerativeFillUiState.Filling,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = 24.dp)
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.96f),
+                shape = RoundedCornerShape(50),
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Extending canvas edges with Gemini AI...",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
         }
 
         // Layer 4: Clean Material 3 Chrome (Top Bar + Compact Bottom Sheet)
@@ -815,7 +1030,12 @@ fun DepthStudioScreen(
                                 )
                                 Text(
                                     text = if (depthState.result.isDepthEligible) {
-                                        "Depth ${depthState.result.depthQualityScore}% • ${depthState.result.subjectLabel}"
+                                        val overlapPct = (depthState.result.recommendedClockOverlapFraction * 100f).roundToInt()
+                                        if (overlapPct >= 4) {
+                                            "Depth ${depthState.result.depthQualityScore}% • ${overlapPct}% clock tuck"
+                                        } else {
+                                            "Depth ${depthState.result.depthQualityScore}% • ${depthState.result.subjectLabel}"
+                                        }
                                     } else {
                                         "Flat canvas (no overlap)"
                                     },
@@ -952,7 +1172,9 @@ fun DepthStudioScreen(
                                             Text("Depth Engine Layer", style = MaterialTheme.typography.titleSmall)
                                             val subtitle = when (depthState) {
                                                 is DepthStudioUiState.Ready -> if (depthState.result.isDepthEligible && depthState.result.cutoutBitmap != null) {
-                                                    "${depthState.result.subjectCategory.displayName} • ${depthState.result.processingTimeMs}ms • Score ${depthState.result.depthQualityScore}/100"
+                                                    val overlapPct = (depthState.result.recommendedClockOverlapFraction * 100f).roundToInt()
+                                                    val tuckLabel = if (overlapPct >= 4) " • ${overlapPct}% clock tuck" else ""
+                                                    "${depthState.result.subjectCategory.displayName}$tuckLabel • ${depthState.result.processingTimeMs}ms • Score ${depthState.result.depthQualityScore}/100"
                                                 } else {
                                                     "No isolated foreground subject above horizon"
                                                 }
@@ -1001,18 +1223,21 @@ fun DepthStudioScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text("Clock Height", style = MaterialTheme.typography.labelMedium)
+                                        Text("Clock Height Y", style = MaterialTheme.typography.labelMedium)
                                         Slider(
-                                            value = clockPlacement,
-                                            onValueChange = { clockPlacement = it },
+                                            value = clockConfig.placementY,
+                                            onValueChange = { clockConfig = clockConfig.copy(placementY = it) },
                                             valueRange = 0.06f..0.44f,
                                             modifier = Modifier.weight(1f)
                                         )
                                         if (depthState is DepthStudioUiState.Ready) {
                                             TextButton(
                                                 onClick = {
-                                                    clockPlacement = depthState.result.recommendedClockTopFraction
-                                                    clockAlignment = depthState.result.recommendedAlign
+                                                    clockConfig = clockConfig.copy(
+                                                        placementY = depthState.result.recommendedClockTopFraction,
+                                                        alignment = depthState.result.recommendedAlign,
+                                                        offsetXFraction = 0f
+                                                    )
                                                     clockColorIndex = 0
                                                 },
                                                 contentPadding = PaddingValues(horizontal = 8.dp)
@@ -1024,99 +1249,189 @@ fun DepthStudioScreen(
                                 }
 
                                 DepthSectionTab.CLOCK -> {
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        contentPadding = PaddingValues(end = 8.dp)
-                                    ) {
-                                        items(HyperOsClockFace.entries) { face ->
-                                            HyperOsClockFaceThumbnail(
-                                                face = face,
-                                                selected = clockFace == face,
-                                                accentColor = secondaryBlendColor,
-                                                onClick = {
-                                                    clockFace = face
-                                                    clockFont = face.recommendedFont
-                                                }
-                                            )
-                                        }
+                                    val filteredFaces = remember(selectedClockCategory) {
+                                        if (selectedClockCategory == null) HyperOsClockFace.entries
+                                        else HyperOsClockFace.entries.filter { it.category == selectedClockCategory }
                                     }
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 310.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        // Clock Family Filter + Tap-Edge Edit Toggle
+                                        LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            item {
+                                                FilterChip(
+                                                    selected = isClockEditing,
+                                                    onClick = { isClockEditing = !isClockEditing },
+                                                    label = {
+                                                        Text(
+                                                            if (isClockEditing) "Hide Handles" else "Drag Edges",
+                                                            style = MaterialTheme.typography.labelSmall
+                                                        )
+                                                    },
+                                                    modifier = Modifier.testTag("clock_toggle_handles_chip")
+                                                )
+                                            }
+                                            item {
+                                                FilterChip(
+                                                    selected = selectedClockCategory == null,
+                                                    onClick = { selectedClockCategory = null },
+                                                    label = { Text("All (11)", style = MaterialTheme.typography.labelSmall) }
+                                                )
+                                            }
+                                            items(HyperOsClockCategory.entries) { cat ->
+                                                FilterChip(
+                                                    selected = selectedClockCategory == cat,
+                                                    onClick = { selectedClockCategory = cat },
+                                                    label = { Text(cat.label, style = MaterialTheme.typography.labelSmall) }
+                                                )
+                                            }
+                                        }
 
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        items(HyperOsClockFont.entries) { fontItem ->
-                                            FilterChip(
-                                                selected = clockFont == fontItem,
-                                                onClick = { clockFont = fontItem },
-                                                label = {
-                                                    Text(
-                                                        text = fontItem.label,
-                                                        fontFamily = fontItem.family,
-                                                        fontWeight = FontWeight.Bold
+                                        LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            contentPadding = PaddingValues(end = 8.dp)
+                                        ) {
+                                            items(filteredFaces, key = { it.name }) { face ->
+                                                HyperOsClockFaceThumbnail(
+                                                    face = face,
+                                                    selected = clockConfig.face == face,
+                                                    accentColor = secondaryBlendColor,
+                                                    onClick = {
+                                                        clockConfig = clockConfig.copy(
+                                                            face = face,
+                                                            font = face.recommendedFont
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            items(HyperOsClockFont.entries, key = { it.name }) { fontItem ->
+                                                FilterChip(
+                                                    selected = clockConfig.font == fontItem,
+                                                    onClick = { clockConfig = clockConfig.copy(font = fontItem) },
+                                                    label = {
+                                                        Text(
+                                                            text = fontItem.label,
+                                                            fontFamily = fontItem.family,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+
+                                        // 5 Finish Modes: Solid | Translucent | Blend | Outline | Blur Glass
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            items(HyperOsClockFinish.entries, key = { it.name }) { fin ->
+                                                FilterChip(
+                                                    selected = clockConfig.finish == fin,
+                                                    onClick = {
+                                                        val defaultAlpha = when (fin) {
+                                                            HyperOsClockFinish.TRANSLUCENT -> 0.62f
+                                                            HyperOsClockFinish.BLUR_GLASS -> 0.88f
+                                                            else -> clockConfig.opacity.coerceAtLeast(0.88f)
+                                                        }
+                                                        clockConfig = clockConfig.copy(finish = fin, opacity = defaultAlpha)
+                                                    },
+                                                    label = { Text(fin.label, style = MaterialTheme.typography.labelSmall) },
+                                                    modifier = Modifier.testTag("clock_finish_${fin.name}")
+                                                )
+                                            }
+                                        }
+
+                                        // Swatches + Alignment
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                paletteColors.forEachIndexed { idx, col ->
+                                                    val chosen = clockColorIndex % paletteColors.size == idx
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(26.dp)
+                                                            .clip(CircleShape)
+                                                            .background(col)
+                                                            .border(
+                                                                width = if (chosen) 2.5.dp else 1.dp,
+                                                                color = if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                                shape = CircleShape
+                                                            )
+                                                            .clickable { clockColorIndex = idx }
                                                     )
                                                 }
-                                            )
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            paletteColors.forEachIndexed { idx, col ->
-                                                val chosen = clockColorIndex % paletteColors.size == idx
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(26.dp)
-                                                        .clip(CircleShape)
-                                                        .background(col)
-                                                        .border(
-                                                            width = if (chosen) 2.5.dp else 1.dp,
-                                                            color = if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                                            shape = CircleShape
-                                                        )
-                                                        .clickable { clockColorIndex = idx }
-                                                )
                                             }
-                                        }
 
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            HyperOsClockFinish.entries.forEach { fin ->
-                                                FilterChip(
-                                                    selected = clockFinish == fin,
-                                                    onClick = { clockFinish = fin },
-                                                    label = { Text(fin.label, style = MaterialTheme.typography.labelSmall) }
+                                            SingleChoiceSegmentedButtonRow {
+                                                val aligns = listOf(
+                                                    ClockHorizontalAlign.START to Icons.AutoMirrored.Rounded.FormatAlignLeft,
+                                                    ClockHorizontalAlign.CENTER to Icons.Rounded.FormatAlignCenter,
+                                                    ClockHorizontalAlign.END to Icons.AutoMirrored.Rounded.FormatAlignRight
                                                 )
-                                            }
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        SingleChoiceSegmentedButtonRow {
-                                            val aligns = listOf(
-                                                ClockHorizontalAlign.START to Icons.Rounded.FormatAlignLeft,
-                                                ClockHorizontalAlign.CENTER to Icons.Rounded.FormatAlignCenter,
-                                                ClockHorizontalAlign.END to Icons.Rounded.FormatAlignRight
-                                            )
-                                            aligns.forEachIndexed { idx, (al, icon) ->
-                                                SegmentedButton(
-                                                    selected = clockAlignment == al,
-                                                    onClick = { clockAlignment = al },
-                                                    shape = SegmentedButtonDefaults.itemShape(index = idx, count = aligns.size)
-                                                ) {
-                                                    Icon(icon, contentDescription = al.name, modifier = Modifier.size(16.dp))
+                                                aligns.forEachIndexed { idx, (al, icon) ->
+                                                    SegmentedButton(
+                                                        selected = clockConfig.alignment == al,
+                                                        onClick = { clockConfig = clockConfig.copy(alignment = al) },
+                                                        shape = SegmentedButtonDefaults.itemShape(index = idx, count = aligns.size)
+                                                    ) {
+                                                        Icon(icon, contentDescription = al.name, modifier = Modifier.size(16.dp))
+                                                    }
                                                 }
                                             }
                                         }
-                                        Slider(
-                                            value = clockScale,
-                                            onValueChange = { clockScale = it },
-                                            valueRange = 0.78f..1.25f,
-                                            modifier = Modifier.weight(1f)
+
+                                        // Weight, Opacity, Height, Width & Size Sliders
+                                        ClockParamSlider(
+                                            label = "Weight",
+                                            valueText = "${clockConfig.weightLevel}",
+                                            value = clockConfig.weightLevel.toFloat(),
+                                            valueRange = 100f..900f,
+                                            onValueChange = {
+                                                clockConfig = clockConfig.copy(weightLevel = it.roundToInt())
+                                            },
+                                            sliderTag = "clock_weight_slider"
+                                        )
+                                        ClockParamSlider(
+                                            label = "Opacity",
+                                            valueText = "${(clockConfig.opacity * 100).roundToInt()}%",
+                                            value = clockConfig.opacity,
+                                            valueRange = 0.20f..1.0f,
+                                            onValueChange = { clockConfig = clockConfig.copy(opacity = it) },
+                                            sliderTag = "clock_opacity_slider"
+                                        )
+                                        ClockParamSlider(
+                                            label = "Height",
+                                            valueText = "${(clockConfig.heightScale * 100).roundToInt()}%",
+                                            value = clockConfig.heightScale,
+                                            valueRange = 0.70f..1.55f,
+                                            onValueChange = { clockConfig = clockConfig.copy(heightScale = it) },
+                                            sliderTag = "clock_height_slider"
+                                        )
+                                        ClockParamSlider(
+                                            label = "Width",
+                                            valueText = "${(clockConfig.widthScale * 100).roundToInt()}%",
+                                            value = clockConfig.widthScale,
+                                            valueRange = 0.72f..1.35f,
+                                            onValueChange = { clockConfig = clockConfig.copy(widthScale = it) },
+                                            sliderTag = "clock_width_slider"
+                                        )
+                                        ClockParamSlider(
+                                            label = "Scale",
+                                            valueText = "${(clockConfig.scale * 100).roundToInt()}%",
+                                            value = clockConfig.scale,
+                                            valueRange = 0.70f..1.45f,
+                                            onValueChange = { clockConfig = clockConfig.copy(scale = it) },
+                                            sliderTag = "clock_scale_slider"
                                         )
                                     }
                                 }
@@ -1175,18 +1490,144 @@ fun DepthStudioScreen(
                                         Slider(
                                             value = zoomScale,
                                             onValueChange = { zoomScale = it },
-                                            valueRange = 1.0f..1.6f,
+                                            valueRange = if (allowGenerativeFill) 0.55f..1.80f else 1.0f..1.80f,
                                             modifier = Modifier.weight(1f)
                                         )
+                                        TextButton(
+                                            onClick = {
+                                                zoomScale = 1.0f
+                                                panOffset = Offset.Zero
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp)
+                                        ) {
+                                            Text("${(zoomScale * 100).roundToInt()}%")
+                                        }
+                                    }
+
+                                    if (allowGenerativeFill) {
+                                        // Gemini Generative Fill (Wallpaper Extend) controls
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            items(GenerativeFillMood.entries) { mood ->
+                                                FilterChip(
+                                                    selected = selectedFillMood == mood,
+                                                    onClick = { selectedFillMood = mood },
+                                                    label = { Text(mood.label, style = MaterialTheme.typography.labelSmall) }
+                                                )
+                                            }
+                                        }
+
+                                        if (selectedFillMood == GenerativeFillMood.CUSTOM) {
+                                            OutlinedTextField(
+                                                value = customFillCue,
+                                                onValueChange = { customFillCue = it },
+                                                placeholder = { Text("e.g. soft twilight cirrus sky & pastel mist") },
+                                                singleLine = true,
+                                                textStyle = MaterialTheme.typography.bodySmall,
+                                                shape = RoundedCornerShape(14.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+
+                                        if (fillState is GenerativeFillUiState.Error) {
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.errorContainer,
+                                                shape = RoundedCornerShape(14.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = fillState.message,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    TextButton(onClick = onDismissFillError) {
+                                                        Text("OK")
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    onApplyGenerativeFill(
+                                                        canvasSize.width.toFloat(),
+                                                        canvasSize.height.toFloat(),
+                                                        zoomScale,
+                                                        panOffset.x,
+                                                        panOffset.y,
+                                                        selectedFillMood,
+                                                        customFillCue
+                                                    )
+                                                },
+                                                enabled = hasUncoveredBorders &&
+                                                    fullBitmap != null &&
+                                                    fillState !is GenerativeFillUiState.Filling,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("depth_generative_fill_button")
+                                            ) {
+                                                if (fillState is GenerativeFillUiState.Filling) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(16.dp),
+                                                        strokeWidth = 2.dp
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Extending Edges...", maxLines = 1)
+                                                } else {
+                                                    Icon(
+                                                        Icons.Rounded.AutoFixHigh,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        if (hasUncoveredBorders) "Generative Fill" else "Zoom Out / Drag to Fill",
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+
+                                            if (fillState is GenerativeFillUiState.Applied) {
+                                                OutlinedButton(
+                                                    onClick = onUndoGenerativeFill,
+                                                    modifier = Modifier.testTag("depth_undo_fill_button")
+                                                ) {
+                                                    Icon(
+                                                        Icons.AutoMirrored.Rounded.Undo,
+                                                        contentDescription = "Undo Fill",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Undo")
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
                                         FilterChip(
-                                            selected = useLiveTime,
-                                            onClick = { useLiveTime = !useLiveTime },
-                                            label = { Text("Live", style = MaterialTheme.typography.labelSmall) }
+                                            selected = clockConfig.useLiveTime,
+                                            onClick = { clockConfig = clockConfig.copy(useLiveTime = !clockConfig.useLiveTime) },
+                                            label = { Text("Live Time", style = MaterialTheme.typography.labelSmall) }
                                         )
                                         FilterChip(
-                                            selected = showDateAndWeather,
-                                            onClick = { showDateAndWeather = !showDateAndWeather },
-                                            label = { Text("Date", style = MaterialTheme.typography.labelSmall) }
+                                            selected = clockConfig.showDateAndWeather,
+                                            onClick = { clockConfig = clockConfig.copy(showDateAndWeather = !clockConfig.showDateAndWeather) },
+                                            label = { Text("Date & Weather", style = MaterialTheme.typography.labelSmall) }
                                         )
                                     }
                                 }
@@ -1194,9 +1635,58 @@ fun DepthStudioScreen(
                         }
                     }
 
+                    // Contextual quick Generative Fill banner when user pans/zooms past borders from any tab
+                    AnimatedVisibility(
+                        visible = allowGenerativeFill && hasUncoveredBorders && (activeTab != DepthSectionTab.WALLPAPER || !showControls) && fillState !is GenerativeFillUiState.Filling
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                activeTab = DepthSectionTab.WALLPAPER
+                                showControls = true
+                                onApplyGenerativeFill(
+                                    canvasSize.width.toFloat(),
+                                    canvasSize.height.toFloat(),
+                                    zoomScale,
+                                    panOffset.x,
+                                    panOffset.y,
+                                    selectedFillMood,
+                                    customFillCue
+                                )
+                            },
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Rounded.AutoFixHigh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Fill Uncovered Borders with Gemini AI")
+                        }
+                    }
+
+                    if (fillState is GenerativeFillUiState.Filling && activeTab != DepthSectionTab.WALLPAPER) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Extending canvas borders & refreshing depth contour...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+
                     Button(
                         onClick = { showApplyDialog = true },
-                        enabled = !isApplying,
+                        enabled = !isApplying && fillState !is GenerativeFillUiState.Filling,
                         shape = RoundedCornerShape(50),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1228,10 +1718,10 @@ fun DepthStudioScreen(
             onDismiss = { showApplyDialog = false },
             onSelectTarget = { target ->
                 showApplyDialog = false
-                val needsCrop = zoomScale > 1.01f || panOffset != Offset.Zero
+                val needsTransform = kotlin.math.abs(zoomScale - 1.0f) > 0.01f || panOffset != Offset.Zero
                 if (fullBitmap != null) {
-                    val bitmapToApply = if (needsCrop) {
-                        cropBitmapForViewport(
+                    val bitmapToApply = if (needsTransform) {
+                        renderTransformedViewportBitmap(
                             source = fullBitmap,
                             zoomScale = zoomScale,
                             panOffset = panOffset,
@@ -1299,7 +1789,7 @@ private fun WallpaperTargetChooserDialog(
     )
 }
 
-private fun cropBitmapForViewport(
+private fun renderTransformedViewportBitmap(
     source: Bitmap,
     zoomScale: Float,
     panOffset: Offset,
@@ -1307,32 +1797,85 @@ private fun cropBitmapForViewport(
     viewportHeightPx: Float
 ): Bitmap {
     if (viewportWidthPx <= 0f || viewportHeightPx <= 0f) return source
-    val srcW = source.width.toFloat()
-    val srcH = source.height.toFloat()
-    val baseScale = maxOf(viewportWidthPx / srcW, viewportHeightPx / srcH)
-    val effectiveScale = baseScale * zoomScale.coerceAtLeast(1f)
+    val spec = DepthGenerativeFillEngine.computeFrameSpec(
+        sourceWidth = source.width,
+        sourceHeight = source.height,
+        viewportWidth = viewportWidthPx,
+        viewportHeight = viewportHeightPx,
+        zoomScale = zoomScale,
+        panOffsetX = panOffset.x,
+        panOffsetY = panOffset.y
+    )
+    if (!spec.hasUncoveredBorders) {
+        val srcW = source.width.toFloat()
+        val srcH = source.height.toFloat()
+        val baseScale = maxOf(viewportWidthPx / srcW, viewportHeightPx / srcH)
+        val effectiveScale = baseScale * zoomScale.coerceAtLeast(1f)
 
-    val centerX = viewportWidthPx / 2f + panOffset.x
-    val centerY = viewportHeightPx / 2f + panOffset.y
+        val centerX = viewportWidthPx / 2f + panOffset.x
+        val centerY = viewportHeightPx / 2f + panOffset.y
 
-    val left = ((0f - centerX) / effectiveScale + srcW / 2f).coerceIn(0f, srcW - 1f)
-    val top = ((0f - centerY) / effectiveScale + srcH / 2f).coerceIn(0f, srcH - 1f)
-    val right = ((viewportWidthPx - centerX) / effectiveScale + srcW / 2f).coerceIn(left + 1f, srcW)
-    val bottom = ((viewportHeightPx - centerY) / effectiveScale + srcH / 2f).coerceIn(top + 1f, srcH)
+        val left = ((0f - centerX) / effectiveScale + srcW / 2f).coerceIn(0f, srcW - 1f)
+        val top = ((0f - centerY) / effectiveScale + srcH / 2f).coerceIn(0f, srcH - 1f)
+        val right = ((viewportWidthPx - centerX) / effectiveScale + srcW / 2f).coerceIn(left + 1f, srcW)
+        val bottom = ((viewportHeightPx - centerY) / effectiveScale + srcH / 2f).coerceIn(top + 1f, srcH)
 
-    val cropX = left.roundToInt().coerceIn(0, source.width - 1)
-    val cropY = top.roundToInt().coerceIn(0, source.height - 1)
-    val cropW = (right - left).roundToInt().coerceIn(1, source.width - cropX)
-    val cropH = (bottom - top).roundToInt().coerceIn(1, source.height - cropY)
+        val cropX = left.roundToInt().coerceIn(0, source.width - 1)
+        val cropY = top.roundToInt().coerceIn(0, source.height - 1)
+        val cropW = (right - left).roundToInt().coerceIn(1, source.width - cropX)
+        val cropH = (bottom - top).roundToInt().coerceIn(1, source.height - cropY)
+        return Bitmap.createBitmap(source, cropX, cropY, cropW, cropH)
+    }
 
-    return Bitmap.createBitmap(source, cropX, cropY, cropW, cropH)
+    val output = createBitmap(spec.canvasWidth, spec.canvasHeight)
+    val canvas = AndroidCanvas(output)
+    canvas.drawColor(android.graphics.Color.rgb(16, 18, 24))
+    val paint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG or AndroidPaint.FILTER_BITMAP_FLAG)
+    canvas.drawBitmap(source, null, spec.placedRect, paint)
+    return output
 }
 
 private fun parseHexOrNull(hex: String?): Color? {
     if (hex.isNullOrBlank()) return null
     return try {
-        Color(android.graphics.Color.parseColor(hex.trim()))
+        Color(hex.trim().toColorInt())
     } catch (_: Exception) {
         null
+    }
+}
+
+@Composable
+private fun ClockParamSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+    sliderTag: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.width(54.dp)
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(sliderTag)
+        )
+        Text(
+            text = valueText,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(38.dp)
+        )
     }
 }

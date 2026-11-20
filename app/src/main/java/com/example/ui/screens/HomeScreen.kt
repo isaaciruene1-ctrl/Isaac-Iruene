@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +32,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -49,11 +55,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.catalog.WallpaperCatalog
 import com.example.data.model.DiscoveryCollection
+import com.example.data.model.UiStyleMode
 import com.example.data.model.Wallpaper
+import com.example.data.model.WallpaperCategory
 import com.example.ui.components.BackdropWordmark
 import com.example.ui.components.FavoriteHeartButton
+import com.example.ui.components.TactileSurface
 import com.example.ui.components.WallpaperAsyncImage
 import com.example.ui.components.WallpaperGridCard
+import com.example.ui.components.glassSpecularBorder
+import com.example.ui.theme.LocalUiStyleMode
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,15 +73,19 @@ fun HomeScreen(
     userDisplayName: String?,
     favoriteIds: Set<String>,
     isRefreshing: Boolean,
+    showCategoryChips: Boolean,
     onRefresh: () -> Unit,
     onSearchShortcut: () -> Unit,
+    onSettingsShortcut: () -> Unit,
     onProfileShortcut: () -> Unit,
     onOpenWallpaper: (Wallpaper) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onSelectCategory: (WallpaperCategory) -> Unit,
     onOpenCollection: (DiscoveryCollection) -> Unit,
     onOpenDepthStudio: (Wallpaper) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
     val featured = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.FEATURED).take(6) }
     val trending = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.TRENDING).take(10) }
     val editorsPicks = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.EDITORS_PICKS).take(6) }
@@ -113,10 +128,11 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         BackdropWordmark(markSize = 28.dp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.72f else 1f),
                                 shape = CircleShape,
+                                border = glassSpecularBorder(),
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 IconButton(
@@ -130,8 +146,25 @@ fun HomeScreen(
                                 }
                             }
                             Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.72f else 1f),
                                 shape = CircleShape,
+                                border = glassSpecularBorder(),
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                IconButton(
+                                    onClick = onSettingsShortcut,
+                                    modifier = Modifier.testTag("home_settings_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Settings,
+                                        contentDescription = "Open Studio Settings"
+                                    )
+                                }
+                            }
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isGlass) 0.82f else 1f),
+                                shape = CircleShape,
+                                border = glassSpecularBorder(),
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 IconButton(
@@ -156,20 +189,44 @@ fun HomeScreen(
                 }
             }
 
-            // Quick 20-Collection Discovery Chips
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(DiscoveryCollection.entries) { collection ->
-                        FilterChip(
-                            selected = false,
-                            onClick = { onOpenCollection(collection) },
-                            label = { Text(collection.title) },
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier.testTag("home_collection_chip_${collection.name}")
+            // Opt-in Category Filter Chips (disabled by default, enabled in Settings)
+            if (showCategoryChips) {
+                item(key = "home_category_chips_row") {
+                    val homeCategories = remember {
+                        listOf(
+                            WallpaperCategory.ABSTRACT to "Abstract",
+                            WallpaperCategory.NATURE to "Nature",
+                            WallpaperCategory.ARCHITECTURE to "Architecture",
+                            WallpaperCategory.MINIMALIST to "Minimal",
+                            WallpaperCategory.AMOLED to "AMOLED",
+                            WallpaperCategory.SPACE to "Space",
+                            WallpaperCategory.DEPTH_STUDIO to "Depth Studio",
+                            WallpaperCategory.FUTURISTIC to "Futuristic",
+                            WallpaperCategory.AUTOMOTIVE to "Automotive",
+                            WallpaperCategory.CINEMATIC to "Cinematic",
+                            WallpaperCategory.ANIME_ARTISTIC to "Artistic"
                         )
+                    }
+                    AnimatedVisibility(
+                        visible = showCategoryChips,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.testTag("home_category_chips_row")
+                        ) {
+                            items(homeCategories, key = { (cat, _) -> cat.name }) { (category, label) ->
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { onSelectCategory(category) },
+                                    label = { Text(label) },
+                                    shape = RoundedCornerShape(50),
+                                    modifier = Modifier.testTag("home_category_chip_${category.name}")
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -222,8 +279,8 @@ fun HomeScreen(
             // Depth Studio Signature Banner + Carousel
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                    TactileSurface(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
                         shape = RoundedCornerShape(28.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -332,7 +389,7 @@ fun HomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionHeader(
                         title = "Trending Now",
-                        subtitle = "Community favorites across 120+ artworks",
+                        subtitle = "Community favorites across 220+ artworks",
                         onSeeAll = { onOpenCollection(DiscoveryCollection.TRENDING) }
                     )
                     HorizontalWallpaperCarousel(
@@ -437,9 +494,12 @@ private fun FeaturedHeroCard(
     onClick: () -> Unit,
     onFavoriteToggle: () -> Unit
 ) {
+    val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
     Surface(
         shape = RoundedCornerShape(32.dp),
-        tonalElevation = 4.dp,
+        border = glassSpecularBorder(),
+        tonalElevation = if (isGlass) 0.dp else 4.dp,
+        shadowElevation = if (isGlass) 8.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
             .height(272.dp)
@@ -476,7 +536,8 @@ private fun FeaturedHeroCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = if (isGlass) 0.72f else 0.85f),
+                    border = glassSpecularBorder(),
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(

@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -71,9 +72,16 @@ import com.example.core.auth.onGoogleSignInClicked
 import com.example.core.auth.signOutUser
 import com.example.data.catalog.WallpaperCatalog
 import com.example.data.media.WallpaperTarget
+import com.example.data.model.UiStyleMode
+import com.example.data.repository.AiCapabilityRegistry
 import com.example.data.repository.GuestLocalUserStore
 import com.example.ui.components.BackdropLogoMark
 import com.example.ui.components.BackdropWordmark
+import com.example.ui.components.DockDestinationSpec
+import com.example.ui.components.FrostedFloatingNavDock
+import com.example.ui.components.FrostedFloatingNavRail
+import com.example.ui.components.FrostedGlassStudioPillFab
+import com.example.ui.components.TactileAmbientBackdrop
 import com.example.ui.screens.AiStudioSheet
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.CollectionDetailScreen
@@ -84,6 +92,7 @@ import com.example.ui.screens.FavoritesScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.PreviewStudioScreen
 import com.example.ui.screens.ProfileSettingsScreen
+import com.example.ui.screens.SettingsPanelScreen
 import com.example.ui.screens.WallpaperDetailScreen
 import com.example.ui.theme.BackdropTheme
 import com.example.ui.viewmodel.AiStudioViewModel
@@ -101,6 +110,7 @@ object BackdropRoutes {
     const val FAVORITES = "favorites"
     const val COLLECTIONS = "collections"
     const val PROFILE = "profile"
+    const val SETTINGS = "settings"
     const val DETAIL = "detail/{wallpaperId}"
     const val PREVIEW = "preview/{wallpaperId}"
     const val DEPTH = "depth/{wallpaperId}"
@@ -246,6 +256,10 @@ private fun BackdropAuthenticatedShell(
     val favoriteCount by backdropViewModel.favoriteCount.collectAsStateWithLifecycle()
     val collectionCount by backdropViewModel.collectionCount.collectAsStateWithLifecycle()
     val depthStudioState by depthStudioViewModel.state.collectAsStateWithLifecycle()
+    val depthFillState by depthStudioViewModel.fillState.collectAsStateWithLifecycle()
+    val depthFramingResetVersion by depthStudioViewModel.framingResetVersion.collectAsStateWithLifecycle()
+    val aiCapabilities by aiStudioViewModel.capabilities.collectAsStateWithLifecycle()
+    val aiDiagnosticState by aiStudioViewModel.diagnosticState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(backdropViewModel) {
@@ -255,6 +269,12 @@ private fun BackdropAuthenticatedShell(
     }
 
     var showAiSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(aiCapabilities.removedNotice) {
+        val notice = aiCapabilities.removedNotice ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(notice)
+        AiCapabilityRegistry.consumeNotice()
+    }
     var isUpgradingFromGuest by remember { mutableStateOf(false) }
     var snackbarErrorTrigger by remember { mutableStateOf<String?>(null) }
 
@@ -285,14 +305,26 @@ private fun BackdropAuthenticatedShell(
 
     BackdropTheme(
         themeMode = preferences.parsedThemeMode,
-        amoledDark = preferences.amoledDark
+        amoledDark = preferences.amoledDark,
+        uiStyle = preferences.parsedUiStyle
     ) {
+        val isGlassUi = preferences.parsedUiStyle == UiStyleMode.FROSTED_GLASS_OS
         val navController = rememberNavController()
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route ?: BackdropRoutes.HOME
 
         val isTopLevelRoute = TopDestination.entries.any { it.route == currentRoute }
         val showAiFab = currentRoute == BackdropRoutes.HOME || currentRoute == BackdropRoutes.EXPLORE
+        val dockDestinations = remember {
+            TopDestination.entries.map {
+                DockDestinationSpec(
+                    route = it.route,
+                    label = it.label,
+                    selectedIcon = it.selectedIcon,
+                    unselectedIcon = it.unselectedIcon
+                )
+            }
+        }
 
         fun navigateTopLevel(route: String) {
             navController.navigate(route) {
@@ -304,54 +336,35 @@ private fun BackdropAuthenticatedShell(
             }
         }
 
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val useRail = maxWidth >= 840.dp
-            val gridColumns = when {
-                maxWidth >= 840.dp -> 4
-                maxWidth >= 600.dp -> 3
-                else -> 2
-            }
-
-            Row(modifier = Modifier.fillMaxSize()) {
-                if (useRail && isTopLevelRoute) {
-                    NavigationRail(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                    ) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        BackdropLogoMark(size = 32.dp)
-                        Spacer(modifier = Modifier.height(20.dp))
-                        TopDestination.entries.forEach { dest ->
-                            val selected = currentRoute == dest.route
-                            NavigationRailItem(
-                                selected = selected,
-                                onClick = { navigateTopLevel(dest.route) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                                        contentDescription = dest.label
-                                    )
-                                },
-                                label = { Text(dest.label) }
-                            )
-                        }
-                    }
+        TactileAmbientBackdrop {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val useRail = maxWidth >= 840.dp
+                val gridColumns = when {
+                    maxWidth >= 840.dp -> 4
+                    maxWidth >= 600.dp -> 3
+                    else -> 2
                 }
 
-                Scaffold(
-                    modifier = Modifier.weight(1f),
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-                    contentWindowInsets = if (isTopLevelRoute) WindowInsets.statusBars else WindowInsets(0, 0, 0, 0),
-                    bottomBar = {
-                        if (!useRail && isTopLevelRoute) {
-                            NavigationBar(
-                                tonalElevation = 4.dp,
-                                modifier = Modifier.testTag("bottom_navigation_bar")
+                Row(modifier = Modifier.fillMaxSize()) {
+                    if (useRail && isTopLevelRoute) {
+                        if (isGlassUi) {
+                            FrostedFloatingNavRail(
+                                destinations = dockDestinations,
+                                currentRoute = currentRoute,
+                                onSelectRoute = ::navigateTopLevel
+                            )
+                        } else {
+                            NavigationRail(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .windowInsetsPadding(WindowInsets.statusBars)
                             ) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                BackdropLogoMark(size = 32.dp)
+                                Spacer(modifier = Modifier.height(20.dp))
                                 TopDestination.entries.forEach { dest ->
                                     val selected = currentRoute == dest.route
-                                    NavigationBarItem(
+                                    NavigationRailItem(
                                         selected = selected,
                                         onClick = { navigateTopLevel(dest.route) },
                                         icon = {
@@ -360,31 +373,79 @@ private fun BackdropAuthenticatedShell(
                                                 contentDescription = dest.label
                                             )
                                         },
-                                        label = { Text(dest.label, maxLines = 1) },
-                                        modifier = Modifier.testTag("nav_${dest.route}")
+                                        label = { Text(dest.label) }
                                     )
                                 }
                             }
                         }
-                    },
-                    floatingActionButton = {
-                        if (showAiFab) {
-                            ExtendedFloatingActionButton(
-                                onClick = { showAiSheet = true },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.AutoAwesome,
-                                        contentDescription = null
-                                    )
-                                },
-                                text = { Text("AI Studio") },
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.testTag("ai_studio_fab")
-                            )
-                        }
                     }
-                ) { innerPadding ->
+
+                    Scaffold(
+                        modifier = Modifier.weight(1f),
+                        containerColor = if (isGlassUi) Color.Transparent else MaterialTheme.colorScheme.background,
+                        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                        contentWindowInsets = if (isTopLevelRoute || currentRoute == BackdropRoutes.SETTINGS) {
+                            WindowInsets.statusBars
+                        } else {
+                            WindowInsets(0, 0, 0, 0)
+                        },
+                        bottomBar = {
+                            if (!useRail && isTopLevelRoute) {
+                                if (isGlassUi) {
+                                    FrostedFloatingNavDock(
+                                        destinations = dockDestinations,
+                                        currentRoute = currentRoute,
+                                        onSelectRoute = ::navigateTopLevel
+                                    )
+                                } else {
+                                    NavigationBar(
+                                        tonalElevation = 4.dp,
+                                        modifier = Modifier.testTag("bottom_navigation_bar")
+                                    ) {
+                                        TopDestination.entries.forEach { dest ->
+                                            val selected = currentRoute == dest.route
+                                            NavigationBarItem(
+                                                selected = selected,
+                                                onClick = { navigateTopLevel(dest.route) },
+                                                icon = {
+                                                    Icon(
+                                                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
+                                                        contentDescription = dest.label
+                                                    )
+                                                },
+                                                label = { Text(dest.label, maxLines = 1) },
+                                                modifier = Modifier.testTag("nav_${dest.route}")
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        floatingActionButton = {
+                            if (showAiFab) {
+                                if (isGlassUi) {
+                                    FrostedGlassStudioPillFab(
+                                        onClick = { showAiSheet = true },
+                                        modifier = Modifier.testTag("ai_studio_fab")
+                                    )
+                                } else {
+                                    ExtendedFloatingActionButton(
+                                        onClick = { showAiSheet = true },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.AutoAwesome,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        text = { Text("AI Studio") },
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.testTag("ai_studio_fab")
+                                    )
+                                }
+                            }
+                        }
+                    ) { innerPadding ->
                     NavHost(
                         navController = navController,
                         startDestination = BackdropRoutes.HOME,
@@ -397,11 +458,17 @@ private fun BackdropAuthenticatedShell(
                                 userDisplayName = if (isGuest) "Guest" else user?.displayName,
                                 favoriteIds = favoriteIds,
                                 isRefreshing = isRefreshing,
+                                showCategoryChips = preferences.homeCategoryChipsEnabled,
                                 onRefresh = { backdropViewModel.refreshDiscovery(context) },
                                 onSearchShortcut = { navigateTopLevel(BackdropRoutes.EXPLORE) },
+                                onSettingsShortcut = { navController.navigate(BackdropRoutes.SETTINGS) },
                                 onProfileShortcut = { navigateTopLevel(BackdropRoutes.PROFILE) },
                                 onOpenWallpaper = { wp -> navController.navigate(BackdropRoutes.detail(wp.id)) },
                                 onToggleFavorite = backdropViewModel::toggleFavorite,
+                                onSelectCategory = { category ->
+                                    backdropViewModel.selectCategoryFromHome(category)
+                                    navigateTopLevel(BackdropRoutes.EXPLORE)
+                                },
                                 onOpenCollection = { col ->
                                     backdropViewModel.setCollectionFilter(col)
                                     navigateTopLevel(BackdropRoutes.EXPLORE)
@@ -430,7 +497,11 @@ private fun BackdropAuthenticatedShell(
                                 onSelectSort = backdropViewModel::setSearchSort,
                                 onResetFilters = backdropViewModel::resetFilters,
                                 onOpenWallpaper = { wp -> navController.navigate(BackdropRoutes.detail(wp.id)) },
-                                onToggleFavorite = backdropViewModel::toggleFavorite
+                                onToggleFavorite = backdropViewModel::toggleFavorite,
+                                onOpenAiStudioWithPrompt = { seedPrompt ->
+                                    aiStudioViewModel.prepareCreateFromPrompt(seedPrompt)
+                                    showAiSheet = true
+                                }
                             )
                         }
 
@@ -476,8 +547,10 @@ private fun BackdropAuthenticatedShell(
                                 onClearCache = { backdropViewModel.clearImageCache(context) },
                                 onThemeModeChange = backdropViewModel::setThemeMode,
                                 onAmoledDarkChange = backdropViewModel::setAmoledDark,
+                                onHomeCategoryChipsChange = backdropViewModel::setHomeCategoryChipsEnabled,
                                 onImageQualityChange = backdropViewModel::setImageQuality,
                                 onWifiOnlyChange = backdropViewModel::setWifiOnlyDownloads,
+                                onOpenSettingsPanel = { navController.navigate(BackdropRoutes.SETTINGS) },
                                 onSignOut = {
                                     signOutUser(credentialManager = credentialManager, scope = scope)
                                 },
@@ -485,6 +558,25 @@ private fun BackdropAuthenticatedShell(
                                 isSigningIn = isUpgradingFromGuest,
                                 onSignInWithGoogle = triggerGuestGoogleSignIn,
                                 onExitGuestMode = onExitGuestMode
+                            )
+                        }
+
+                        composable(BackdropRoutes.SETTINGS) {
+                            SettingsPanelScreen(
+                                preferences = preferences,
+                                cacheBytes = cacheBytes,
+                                diagnosticState = aiDiagnosticState,
+                                onBack = { navController.popBackStack() },
+                                onUiStyleChange = backdropViewModel::setUiStyle,
+                                onThemeModeChange = backdropViewModel::setThemeMode,
+                                onAmoledDarkChange = backdropViewModel::setAmoledDark,
+                                onHomeCategoryChipsChange = backdropViewModel::setHomeCategoryChipsEnabled,
+                                onImageQualityChange = backdropViewModel::setImageQuality,
+                                onWifiOnlyChange = backdropViewModel::setWifiOnlyDownloads,
+                                onRefreshCacheSize = { backdropViewModel.refreshCacheSize(context) },
+                                onClearCache = { backdropViewModel.clearImageCache(context) },
+                                onRunAiDiagnostic = aiStudioViewModel::runConnectionDiagnostic,
+                                onOpenAiStudio = { showAiSheet = true }
                             )
                         }
 
@@ -524,7 +616,8 @@ private fun BackdropAuthenticatedShell(
                                 onOpenAiAnalyze = { targetWp ->
                                     aiStudioViewModel.prepareAnalyzeWallpaper(targetWp)
                                     showAiSheet = true
-                                }
+                                },
+                                aiCapabilities = aiCapabilities
                             )
                         }
 
@@ -551,11 +644,17 @@ private fun BackdropAuthenticatedShell(
                             DepthStudioScreen(
                                 initialWallpaper = wp,
                                 depthState = depthStudioState,
+                                fillState = depthFillState,
+                                framingResetVersion = depthFramingResetVersion,
                                 isApplying = isApplying,
+                                allowGenerativeFill = aiCapabilities.imageGenAvailable,
                                 onLoadWallpaper = depthStudioViewModel::loadWallpaperForDepthStudio,
                                 onPickCustomPhoto = { uri, forceRescan ->
                                     depthStudioViewModel.loadCustomPhotoForDepthStudio(context, uri, forceRescan)
                                 },
+                                onApplyGenerativeFill = depthStudioViewModel::applyGenerativeFill,
+                                onUndoGenerativeFill = depthStudioViewModel::undoGenerativeFill,
+                                onDismissFillError = depthStudioViewModel::clearFillError,
                                 onBack = { navController.popBackStack() },
                                 onApplyWallpaper = backdropViewModel::applyWallpaper,
                                 onApplyCustomBitmapWallpaper = backdropViewModel::applyBitmapWallpaper
@@ -590,6 +689,7 @@ private fun BackdropAuthenticatedShell(
                     }
                 }
             }
+        }
         }
 
         if (showAiSheet) {

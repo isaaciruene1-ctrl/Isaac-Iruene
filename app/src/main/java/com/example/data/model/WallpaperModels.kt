@@ -64,6 +64,11 @@ enum class ThemeMode {
     SYSTEM, LIGHT, DARK
 }
 
+enum class UiStyleMode(val label: String, val subtitle: String) {
+    MATERIAL_3("Material 3", "Expressive tonal surfaces & anchored navigation bar"),
+    FROSTED_GLASS_OS("Frosted Glass OS", "Translucent tactile panels, specular rims & floating pill dock")
+}
+
 enum class ImageQualityPref(val label: String, val description: String) {
     ORIGINAL("Original 4K/QHD", "Always download and preview full resolution"),
     HIGH("High Efficiency", "Balanced 1440p previews with original downloads"),
@@ -87,7 +92,7 @@ data class Wallpaper(
     val collections: List<DiscoveryCollection>,
     val thumbnailUrl: String,
     val fullResUrl: String,
-    @DrawableRes val fallbackResId: Int,
+    @param:DrawableRes val fallbackResId: Int,
     val width: Int,
     val height: Int,
     val resolutionTier: ResolutionTier,
@@ -101,7 +106,8 @@ data class Wallpaper(
     val supportsDepthEffect: Boolean = false,
     val depthSubjectHint: DepthSubjectHint = DepthSubjectHint.LOWER_SILHOUETTE,
     val popularityScore: Int = 80,
-    val addedOrder: Int = 1
+    val addedOrder: Int = 1,
+    val isBundledAsset: Boolean = false
 ) {
     val resolutionText: String get() = "$width × $height"
 }
@@ -143,6 +149,8 @@ data class UserPreferencesDoc(
     val imageQuality: String = ImageQualityPref.ORIGINAL.name,
     val wifiOnlyDownloads: Boolean = false,
     val recentSearches: List<String> = emptyList(),
+    val homeCategoryChipsEnabled: Boolean = false,
+    val uiStyle: String = UiStyleMode.MATERIAL_3.name,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -151,6 +159,9 @@ data class UserPreferencesDoc(
 
     val parsedImageQuality: ImageQualityPref
         get() = runCatching { ImageQualityPref.valueOf(imageQuality) }.getOrDefault(ImageQualityPref.ORIGINAL)
+
+    val parsedUiStyle: UiStyleMode
+        get() = runCatching { UiStyleMode.valueOf(uiStyle) }.getOrDefault(UiStyleMode.MATERIAL_3)
 }
 
 enum class SearchSort {

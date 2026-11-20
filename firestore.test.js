@@ -142,8 +142,24 @@ test("Owner can write recentlyViewed and preferences with enum checks", async ()
       imageQuality: "ORIGINAL",
       wifiOnlyDownloads: false,
       recentSearches: ["pastel", "amoled"],
+      homeCategoryChipsEnabled: false,
       createdAt: ts,
       updatedAt: ts,
+    })
+  );
+
+  await assertSucceeds(
+    prefRef.update({
+      homeCategoryChipsEnabled: true,
+      updatedAt: pastTimestamp(),
+    })
+  );
+
+  // Non-boolean homeCategoryChipsEnabled must fail
+  await assertFails(
+    prefRef.update({
+      homeCategoryChipsEnabled: "yes",
+      updatedAt: pastTimestamp(),
     })
   );
 

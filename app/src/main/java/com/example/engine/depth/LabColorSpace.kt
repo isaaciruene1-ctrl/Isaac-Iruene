@@ -97,6 +97,28 @@ internal object LabColorSpace {
         }
     }
 
+    fun argbToLab(argb: Int, outLab: FloatArray) {
+        val r8 = (argb ushr 16) and 0xFF
+        val g8 = (argb ushr 8) and 0xFF
+        val b8 = argb and 0xFF
+
+        val rLin = srgbToLinear[r8]
+        val gLin = srgbToLinear[g8]
+        val bLin = srgbToLinear[b8]
+
+        val x = (0.4124564f * rLin + 0.3575761f * gLin + 0.1804375f * bLin) / 0.95047f
+        val y = 0.2126729f * rLin + 0.7151522f * gLin + 0.0721750f * bLin
+        val z = (0.0193339f * rLin + 0.1191920f * gLin + 0.9503041f * bLin) / 1.08883f
+
+        val fx = fLab(x)
+        val fy = fLab(y)
+        val fz = fLab(z)
+
+        outLab[0] = 116f * fy - 16f
+        outLab[1] = 500f * (fx - fy)
+        outLab[2] = 200f * (fy - fz)
+    }
+
     fun deltaE(l1: Float, a1: Float, b1: Float, l2: Float, a2: Float, b2: Float): Float {
         val dl = l1 - l2
         val da = a1 - a2

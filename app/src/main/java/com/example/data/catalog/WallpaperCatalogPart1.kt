@@ -90,6 +90,57 @@ internal fun unsplashEntry(
     )
 }
 
+internal fun bundledEntry(
+    id: String,
+    @androidx.annotation.DrawableRes resId: Int,
+    title: String,
+    description: String,
+    category: WallpaperCategory,
+    extraCollections: List<DiscoveryCollection>,
+    dominantColors: List<Long>,
+    colorFamily: ColorFamily,
+    tags: List<String>,
+    supportsDepthEffect: Boolean = true,
+    depthHint: DepthSubjectHint = DepthSubjectHint.CENTER_PORTRAIT,
+    popularityScore: Int = 96,
+    addedOrder: Int = 150
+): Wallpaper {
+    val w = 2160
+    val h = 3840
+    val baseCollections = buildList {
+        addAll(extraCollections)
+        add(DiscoveryCollection.ULTRA_HD_4K)
+        if (supportsDepthEffect) add(DiscoveryCollection.DEPTH_STUDIO)
+        add(DiscoveryCollection.COLOUR_COLLECTIONS)
+    }.distinct()
+
+    return Wallpaper(
+        id = id,
+        title = title,
+        description = description,
+        category = category,
+        collections = baseCollections,
+        thumbnailUrl = "asset://unsplash.local/photo-bundled-$id?w=720&h=1120",
+        fullResUrl = "asset://unsplash.local/photo-bundled-$id?w=$w&h=$h&q=95",
+        fallbackResId = resId,
+        width = w,
+        height = h,
+        resolutionTier = ResolutionTier.UHD_4K,
+        aspectRatio = "9:16",
+        dominantColors = dominantColors,
+        colorFamily = colorFamily,
+        tags = tags,
+        creatorName = "BACKDROP Studio",
+        creatorSource = "BACKDROP Curated Originals",
+        isDownloadable = true,
+        supportsDepthEffect = supportsDepthEffect,
+        depthSubjectHint = depthHint,
+        popularityScore = popularityScore,
+        addedOrder = addedOrder,
+        isBundledAsset = true
+    )
+}
+
 internal fun buildCatalogPartOne(): List<Wallpaper> = listOf(
     // --- 15 NATURE WALLPAPERS ---
     unsplashEntry(
@@ -242,15 +293,13 @@ internal fun buildCatalogPartOne(): List<Wallpaper> = listOf(
         title = "Blue Ridge Summit",
         description = "Sharp crystalline peak piercing calm twilight stratocumulus.",
         category = WallpaperCategory.NATURE,
-        extraCollections = listOf(DiscoveryCollection.NATURE, DiscoveryCollection.DEPTH_STUDIO),
+        extraCollections = listOf(DiscoveryCollection.NATURE),
         resolutionTier = ResolutionTier.UHD_4K,
         aspectRatio = "9:16",
         dominantColors = listOf(0xFF5D7DA1, 0xFFB8CCE0, 0xFF283546),
         colorFamily = ColorFamily.BLUE,
         tags = listOf("summit", "snow", "mountain", "clouds"),
         creatorName = "Kalen Emsley",
-        supportsDepthEffect = true,
-        depthHint = DepthSubjectHint.PEAK_HORIZON,
         popularityScore = 93,
         addedOrder = 99
     ),

@@ -82,6 +82,7 @@ import com.example.data.media.DownloadProgress
 import com.example.data.media.WallpaperTarget
 import com.example.data.model.UserCollectionDoc
 import com.example.data.model.Wallpaper
+import com.example.data.repository.AiCapabilities
 import com.example.ui.components.FavoriteHeartButton
 import com.example.ui.components.WallpaperAsyncImage
 import com.example.ui.viewmodel.SyncState
@@ -107,6 +108,7 @@ fun WallpaperDetailScreen(
     onOpenDepthStudio: (Wallpaper) -> Unit,
     onOpenAiRemix: (Wallpaper) -> Unit,
     onOpenAiAnalyze: (Wallpaper) -> Unit,
+    aiCapabilities: AiCapabilities = AiCapabilities(),
     modifier: Modifier = Modifier
 ) {
     val pagerItems = remember(wallpaper.id) {
@@ -443,23 +445,27 @@ fun WallpaperDetailScreen(
                         Text("Depth Studio")
                     }
 
-                    AssistChip(
-                        onClick = { onOpenAiRemix(currentWallpaper) },
-                        label = { Text("AI Remix", color = Color.White) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Rounded.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color(0xFFE7DEFF),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    )
+                    if (aiCapabilities.imageGenAvailable) {
+                        AssistChip(
+                            onClick = { onOpenAiRemix(currentWallpaper) },
+                            label = { Text("AI Remix", color = Color.White) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Rounded.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color(0xFFE7DEFF),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        )
+                    }
 
-                    AssistChip(
-                        onClick = { onOpenAiAnalyze(currentWallpaper) },
-                        label = { Text("Analyze", color = Color.White) }
-                    )
+                    if (aiCapabilities.textAndVisionAvailable) {
+                        AssistChip(
+                            onClick = { onOpenAiAnalyze(currentWallpaper) },
+                            label = { Text("Analyze", color = Color.White) }
+                        )
+                    }
                 }
 
                 // Primary Bottom Action Bar

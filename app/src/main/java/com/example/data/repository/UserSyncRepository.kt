@@ -8,6 +8,7 @@ import com.example.data.model.FavoriteDoc
 import com.example.data.model.ImageQualityPref
 import com.example.data.model.RecentlyViewedDoc
 import com.example.data.model.ThemeMode
+import com.example.data.model.UiStyleMode
 import com.example.data.model.UserCollectionDoc
 import com.example.data.model.UserPreferencesDoc
 import com.google.firebase.Timestamp
@@ -286,6 +287,8 @@ class UserSyncRepository(private val db: FirebaseFirestore) : UserSyncDataSource
                         "imageQuality" to next.imageQuality,
                         "wifiOnlyDownloads" to next.wifiOnlyDownloads,
                         "recentSearches" to next.recentSearches.take(15),
+                        "homeCategoryChipsEnabled" to next.homeCategoryChipsEnabled,
+                        "uiStyle" to next.uiStyle,
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
                 ).await()
@@ -298,6 +301,8 @@ class UserSyncRepository(private val db: FirebaseFirestore) : UserSyncDataSource
                         "imageQuality" to next.imageQuality,
                         "wifiOnlyDownloads" to next.wifiOnlyDownloads,
                         "recentSearches" to next.recentSearches.take(15),
+                        "homeCategoryChipsEnabled" to next.homeCategoryChipsEnabled,
+                        "uiStyle" to next.uiStyle,
                         "createdAt" to FieldValue.serverTimestamp(),
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
@@ -319,6 +324,8 @@ class UserSyncRepository(private val db: FirebaseFirestore) : UserSyncDataSource
         amoledDark = false,
         imageQuality = ImageQualityPref.ORIGINAL.name,
         wifiOnlyDownloads = false,
-        recentSearches = emptyList()
+        recentSearches = emptyList(),
+        homeCategoryChipsEnabled = false,
+        uiStyle = UiStyleMode.MATERIAL_3.name
     )
 }

@@ -48,6 +48,7 @@
         "imageQuality": { "type": "string", "enum": ["ORIGINAL", "HIGH", "BALANCED"], "description": "Preferred browsing/download quality" },
         "wifiOnlyDownloads": { "type": "boolean", "description": "Prefer Wi-Fi for high-res downloads" },
         "recentSearches": { "type": "array", "description": "Recent search query strings (max 15)" },
+        "homeCategoryChipsEnabled": { "type": "boolean", "description": "Optional toggle to display category filter chips on Home (default false)" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp" }
       },

@@ -51,6 +51,38 @@ val SpaceGroteskFontFamily = FontFamily(
     Font(R.font.space_grotesk, FontWeight.Bold)
 )
 
+val FredokaFontFamily = FontFamily(
+    Font(R.font.fredoka, FontWeight.Normal),
+    Font(R.font.fredoka, FontWeight.Medium),
+    Font(R.font.fredoka, FontWeight.SemiBold),
+    Font(R.font.fredoka, FontWeight.Bold)
+)
+
+val ShantellSansFontFamily = FontFamily(
+    Font(R.font.shantell_sans, FontWeight.Normal),
+    Font(R.font.shantell_sans, FontWeight.Medium),
+    Font(R.font.shantell_sans, FontWeight.Bold)
+)
+
+val BigShouldersFontFamily = FontFamily(
+    Font(R.font.big_shoulders_display, FontWeight.Normal),
+    Font(R.font.big_shoulders_display, FontWeight.SemiBold),
+    Font(R.font.big_shoulders_display, FontWeight.Bold),
+    Font(R.font.big_shoulders_display, FontWeight.ExtraBold)
+)
+
+val PlayfairFontFamily = FontFamily(
+    Font(R.font.playfair_display, FontWeight.Normal),
+    Font(R.font.playfair_display, FontWeight.SemiBold),
+    Font(R.font.playfair_display, FontWeight.Bold)
+)
+
+val OrbitronFontFamily = FontFamily(
+    Font(R.font.orbitron, FontWeight.Normal),
+    Font(R.font.orbitron, FontWeight.Medium),
+    Font(R.font.orbitron, FontWeight.Bold)
+)
+
 val Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = OutfitFontFamily,

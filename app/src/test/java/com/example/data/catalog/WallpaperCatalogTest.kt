@@ -12,9 +12,14 @@ import org.junit.Test
 class WallpaperCatalogTest {
 
     @Test
-    fun catalogHasAtLeast130DistinctWallpapersAndUniqueThumbnails() {
+    fun catalogHasAtLeast220DistinctWallpapersAndUniqueThumbnails() {
+        val raw = buildCatalogPartOne() + buildCatalogPartTwo() + buildCatalogPartThree() + buildCatalogPartFour()
+        val rawSlugs = raw.map { it.thumbnailUrl.substringAfter("photo-").substringBefore("?") }
+        val duplicates = rawSlugs.groupingBy { it }.eachCount().filter { it.value > 1 }
+        assertTrue("Expected zero duplicate raw slugs across parts 1-4, found: $duplicates", duplicates.isEmpty())
+
         val all = WallpaperCatalog.allWallpapers
-        assertTrue("Expected at least 130 wallpapers, got ${all.size}", all.size >= 130)
+        assertTrue("Expected at least 220 wallpapers, got ${all.size}", all.size >= 220)
         assertEquals("Duplicate IDs detected", all.size, all.map { it.id }.toSet().size)
         assertEquals(
             "Duplicate thumbnail URLs detected",
@@ -22,7 +27,7 @@ class WallpaperCatalogTest {
             all.map { it.thumbnailUrl }.toSet().size
         )
         val depthItems = WallpaperCatalog.getForCollection(DiscoveryCollection.DEPTH_STUDIO)
-        assertTrue("Expected at least 18 curated Depth Studio wallpapers, got ${depthItems.size}", depthItems.size >= 18)
+        assertTrue("Expected at least 28 curated Depth Studio wallpapers, got ${depthItems.size}", depthItems.size >= 28)
         assertTrue(
             "All Depth Studio entries must have portrait orientation for lock-screen clocks",
             depthItems.all { it.height > it.width }

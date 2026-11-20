@@ -17,12 +17,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Policy
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -54,6 +57,8 @@ import com.example.data.model.ThemeMode
 import com.example.data.model.UserPreferencesDoc
 import com.example.ui.components.BackdropLogoMark
 import com.example.ui.components.BackdropWordmark
+import com.example.ui.components.TactileSurface
+import com.example.ui.components.glassSpecularBorder
 import java.util.Locale
 
 @Composable
@@ -68,8 +73,10 @@ fun ProfileSettingsScreen(
     onClearCache: () -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onAmoledDarkChange: (Boolean) -> Unit,
+    onHomeCategoryChipsChange: (Boolean) -> Unit,
     onImageQualityChange: (ImageQualityPref) -> Unit,
     onWifiOnlyChange: (Boolean) -> Unit,
+    onOpenSettingsPanel: () -> Unit,
     onSignOut: () -> Unit,
     isGuest: Boolean = false,
     isSigningIn: Boolean = false,
@@ -107,8 +114,8 @@ fun ProfileSettingsScreen(
 
         // User Account Card
         item {
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f),
+            TactileSurface(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f),
                 shape = RoundedCornerShape(28.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -172,6 +179,59 @@ fun ProfileSettingsScreen(
             }
         }
 
+        // Dedicated Studio Settings Entry Card (UI Style Switcher + AI Diagnostics)
+        item {
+            TactileSurface(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.64f),
+                shape = RoundedCornerShape(26.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(26.dp))
+                    .clickable(onClick = onOpenSettingsPanel)
+                    .testTag("profile_open_settings_button")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.Tune,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Studio Settings & UI Style",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Text(
+                            text = "Active: ${preferences.parsedUiStyle.label} • Switch to Frosted Glass OS & test Gemini",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = "Open Studio Settings",
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
+
         // Appearance & AMOLED Dark
         item {
             SettingsCard(title = "Appearance & Theme") {
@@ -222,6 +282,33 @@ fun ProfileSettingsScreen(
                         checked = preferences.amoledDark,
                         onCheckedChange = onAmoledDarkChange,
                         modifier = Modifier.testTag("amoled_dark_switch")
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Rounded.FilterList, contentDescription = null)
+                        Column {
+                            Text("Home Category Chips", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Show Abstract, Nature, Architecture & Minimal filter chips on Home",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = preferences.homeCategoryChipsEnabled,
+                        onCheckedChange = onHomeCategoryChipsChange,
+                        modifier = Modifier.testTag("home_category_chips_switch")
                     )
                 }
             }
@@ -442,7 +529,7 @@ fun ProfileSettingsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "BACKDROP pairs a curated 120+ 4K photography & digital art library with " +
+                        "BACKDROP pairs a curated 220+ 4K photography & digital art library with " +
                             "interactive Preview Studio, Depth Studio, and Gemini AI Wallpaper creation.",
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -473,6 +560,7 @@ private fun StatBadge(
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
         shape = RoundedCornerShape(18.dp),
+        border = glassSpecularBorder(),
         modifier = modifier
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -495,8 +583,8 @@ private fun SettingsCard(
     title: String,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    TactileSurface(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(26.dp),
         modifier = Modifier.fillMaxWidth()
     ) {

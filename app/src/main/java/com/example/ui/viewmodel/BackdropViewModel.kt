@@ -20,6 +20,7 @@ import com.example.data.model.ResolutionTier
 import com.example.data.model.SearchFilters
 import com.example.data.model.SearchSort
 import com.example.data.model.ThemeMode
+import com.example.data.model.UiStyleMode
 import com.example.data.model.UserCollectionDoc
 import com.example.data.model.UserPreferencesDoc
 import com.example.data.model.Wallpaper
@@ -257,6 +258,13 @@ class BackdropViewModel(
         _searchFilters.value = _searchFilters.value.copy(category = category)
     }
 
+    fun selectCategoryFromHome(category: WallpaperCategory) {
+        _searchFilters.value = SearchFilters(
+            category = category,
+            depthStudioOnly = category == WallpaperCategory.DEPTH_STUDIO
+        )
+    }
+
     fun setCollectionFilter(collection: DiscoveryCollection?) {
         _searchFilters.value = _searchFilters.value.copy(collection = collection)
     }
@@ -358,6 +366,18 @@ class BackdropViewModel(
     fun setWifiOnlyDownloads(enabled: Boolean) {
         viewModelScope.launch {
             syncRepository.updatePreferences(currentUserId) { it.copy(wifiOnlyDownloads = enabled) }
+        }
+    }
+
+    fun setHomeCategoryChipsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(homeCategoryChipsEnabled = enabled) }
+        }
+    }
+
+    fun setUiStyle(style: UiStyleMode) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(uiStyle = style.name) }
         }
     }
 

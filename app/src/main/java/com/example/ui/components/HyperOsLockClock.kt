@@ -1,24 +1,14 @@
 package com.example.ui.components
 
+import android.os.Build
+import androidx.annotation.FontRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.WbSunny
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,23 +17,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.engine.depth.ClockHorizontalAlign
+import com.example.ui.theme.BigShouldersFontFamily
 import com.example.ui.theme.CormorantFontFamily
+import com.example.ui.theme.FredokaFontFamily
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.OrbitronFontFamily
 import com.example.ui.theme.OswaldFontFamily
 import com.example.ui.theme.OutfitFontFamily
+import com.example.ui.theme.PlayfairFontFamily
+import com.example.ui.theme.PlusJakartaSansFontFamily
+import com.example.ui.theme.ShantellSansFontFamily
 import com.example.ui.theme.SpaceGroteskFontFamily
 import com.example.ui.theme.SyneFontFamily
 import kotlinx.coroutines.delay
@@ -51,33 +49,108 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+enum class HyperOsClockCategory(val label: String) {
+    MAGAZINE("Magazine"),
+    DOODLE("Doodle"),
+    ANALOG_PIXEL("Analog & Pixel"),
+    GEOMETRIC_SEAL("Geometric & Seal")
+}
+
 enum class HyperOsClockFace(
     val label: String,
     val subtitle: String,
-    val recommendedFont: HyperOsClockFont
+    val recommendedFont: HyperOsClockFont,
+    val category: HyperOsClockCategory
 ) {
-    MAGAZINE_STACKED("Magazine", "Stacked bold editorial", HyperOsClockFont.OSWALD),
-    CLASSIC_HORIZON("Editorial", "Wide classic lock display", HyperOsClockFont.OUTFIT),
-    ATELIER_SERIF("Atelier", "Refined serif pairing", HyperOsClockFont.CORMORANT),
-    VERTICAL_SEAL("Studio Seal", "Vertical time with date badge", HyperOsClockFont.SYNE),
-    KINETIC_MONO("Mono", "Tabular precision & seconds", HyperOsClockFont.JETBRAINS_MONO)
+    MAGAZINE_STACKED("Magazine", "Stacked bold editorial", HyperOsClockFont.OSWALD, HyperOsClockCategory.MAGAZINE),
+    POSTER_SPLIT("Poster Bold", "Giant condensed HyperOS numerals", HyperOsClockFont.BIG_SHOULDERS, HyperOsClockCategory.MAGAZINE),
+    CLASSIC_HORIZON("Editorial", "Wide classic lock display", HyperOsClockFont.OUTFIT, HyperOsClockCategory.MAGAZINE),
+    ATELIER_SERIF("Atelier", "Refined high-fashion serif", HyperOsClockFont.PLAYFAIR, HyperOsClockCategory.MAGAZINE),
+    DOODLE_PLAY("Doodle Play", "Playful HyperOS curves & stars", HyperOsClockFont.FREDOKA, HyperOsClockCategory.DOODLE),
+    CUTOUT_POP("Pop Sticker", "Hand-drawn playful sticker badges", HyperOsClockFont.SHANTELL_SANS, HyperOsClockCategory.DOODLE),
+    ANALOG_MINIMAL("Analog Dial", "Minimal sweeping hands dial", HyperOsClockFont.SPACE_GROTESK, HyperOsClockCategory.ANALOG_PIXEL),
+    PIXEL_DUAL_DIAL("Pixel Dual", "Two-tone Pixel display & seconds arc", HyperOsClockFont.SPACE_GROTESK, HyperOsClockCategory.ANALOG_PIXEL),
+    KINETIC_MONO("Mono", "Tabular precision & live seconds", HyperOsClockFont.JETBRAINS_MONO, HyperOsClockCategory.ANALOG_PIXEL),
+    RHOMBUS_PRISM("Rhombus", "HyperOS geometric diamond frame", HyperOsClockFont.ORBITRON, HyperOsClockCategory.GEOMETRIC_SEAL),
+    CALLIGRAPHY_SEAL("Oriental Seal", "Vertical calligraphic chop stamp", HyperOsClockFont.CORMORANT, HyperOsClockCategory.GEOMETRIC_SEAL)
 }
 
 enum class HyperOsClockFont(
     val label: String,
-    val family: FontFamily
+    val family: FontFamily,
+    @param:FontRes val resId: Int
 ) {
-    OSWALD("Oswald", OswaldFontFamily),
-    CORMORANT("Cormorant", CormorantFontFamily),
-    OUTFIT("Outfit", OutfitFontFamily),
-    SYNE("Syne", SyneFontFamily),
-    SPACE_GROTESK("Space", SpaceGroteskFontFamily),
-    JETBRAINS_MONO("Mono", JetBrainsMonoFontFamily)
+    OSWALD("Oswald", OswaldFontFamily, R.font.oswald),
+    BIG_SHOULDERS("Poster", BigShouldersFontFamily, R.font.big_shoulders_display),
+    OUTFIT("Outfit", OutfitFontFamily, R.font.outfit),
+    FREDOKA("Doodle", FredokaFontFamily, R.font.fredoka),
+    SHANTELL_SANS("Marker", ShantellSansFontFamily, R.font.shantell_sans),
+    PLAYFAIR("Playfair", PlayfairFontFamily, R.font.playfair_display),
+    CORMORANT("Cormorant", CormorantFontFamily, R.font.cormorant_garamond),
+    ORBITRON("Geometric", OrbitronFontFamily, R.font.orbitron),
+    SYNE("Syne", SyneFontFamily, R.font.syne),
+    SPACE_GROTESK("Space", SpaceGroteskFontFamily, R.font.space_grotesk),
+    JAKARTA("Jakarta", PlusJakartaSansFontFamily, R.font.plus_jakarta_sans),
+    JETBRAINS_MONO("Mono", JetBrainsMonoFontFamily, R.font.jetbrains_mono)
 }
 
 enum class HyperOsClockFinish(val label: String) {
     SOLID("Solid"),
-    DUO_GRADIENT("Tonal Gradient")
+    TRANSLUCENT("Translucent"),
+    BLEND("Blend"),
+    OUTLINE("Outline"),
+    BLUR_GLASS("Blur Glass")
+}
+
+data class ClockDesignConfig(
+    val face: HyperOsClockFace = HyperOsClockFace.MAGAZINE_STACKED,
+    val font: HyperOsClockFont = HyperOsClockFace.MAGAZINE_STACKED.recommendedFont,
+    val finish: HyperOsClockFinish = HyperOsClockFinish.BLEND,
+    val weightLevel: Int = 700,
+    val scale: Float = 1.0f,
+    val widthScale: Float = 1.0f,
+    val heightScale: Float = 1.0f,
+    val opacity: Float = 0.94f,
+    val placementY: Float = 0.14f,
+    val offsetXFraction: Float = 0f,
+    val alignment: ClockHorizontalAlign = ClockHorizontalAlign.CENTER,
+    val useLiveTime: Boolean = false,
+    val showDateAndWeather: Boolean = true
+)
+
+internal data class ClockTimeParts(
+    val hours: String,
+    val minutes: String,
+    val seconds: String,
+    val dateLabel: String,
+    val hourInt: Int,
+    val minuteInt: Int,
+    val secondInt: Int
+)
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+fun rememberClockFontFamily(font: HyperOsClockFont, weightLevel: Int): FontFamily {
+    val clampedWeight = weightLevel.coerceIn(100, 900)
+    // Snap variation updates in steps of 25 so recomposition & font cache stay buttery smooth
+    val quantizedWeight = ((clampedWeight + 12) / 25 * 25).coerceIn(100, 900)
+    return remember(font, quantizedWeight) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching {
+                FontFamily(
+                    Font(
+                        resId = font.resId,
+                        weight = FontWeight(quantizedWeight),
+                        variationSettings = FontVariation.Settings(
+                            FontVariation.weight(quantizedWeight)
+                        )
+                    )
+                )
+            }.getOrDefault(font.family)
+        } else {
+            font.family
+        }
+    }
 }
 
 @Composable
@@ -87,7 +160,11 @@ fun HyperOsLockClock(
     finish: HyperOsClockFinish,
     primaryColor: Color,
     secondaryColor: Color,
+    weightLevel: Int = 700,
     scaleFactor: Float = 1.0f,
+    widthScale: Float = 1.0f,
+    heightScale: Float = 1.0f,
+    opacity: Float = 0.96f,
     alignment: ClockHorizontalAlign = ClockHorizontalAlign.CENTER,
     useLiveTime: Boolean = false,
     showDateAndWeather: Boolean = true,
@@ -103,13 +180,16 @@ fun HyperOsLockClock(
         }
     }
 
-    val (hours, minutes, seconds, dateLabel) = remember(useLiveTime, nowMillis) {
+    val parts = remember(useLiveTime, nowMillis) {
         if (!useLiveTime) {
             ClockTimeParts(
                 hours = "09",
                 minutes = "41",
                 seconds = "28",
-                dateLabel = "FRI, NOV 15"
+                dateLabel = "FRI, NOV 15",
+                hourInt = 9,
+                minuteInt = 41,
+                secondInt = 28
             )
         } else {
             val d = Date(nowMillis)
@@ -117,7 +197,15 @@ fun HyperOsLockClock(
             val mm = SimpleDateFormat("mm", Locale.getDefault()).format(d)
             val ss = SimpleDateFormat("ss", Locale.getDefault()).format(d)
             val dateStr = SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(d).uppercase(Locale.getDefault())
-            ClockTimeParts(hh, mm, ss, dateStr)
+            ClockTimeParts(
+                hours = hh,
+                minutes = mm,
+                seconds = ss,
+                dateLabel = dateStr,
+                hourInt = hh.toIntOrNull() ?: 9,
+                minuteInt = mm.toIntOrNull() ?: 41,
+                secondInt = ss.toIntOrNull() ?: 0
+            )
         }
     }
 
@@ -132,431 +220,97 @@ fun HyperOsLockClock(
         ClockHorizontalAlign.END -> TextAlign.End
     }
 
-    val scale = scaleFactor.coerceIn(0.75f, 1.35f)
-    val shadow = Shadow(
-        color = Color.Black.copy(alpha = 0.42f),
-        offset = Offset(0f, 6f),
-        blurRadius = 16f
-    )
+    val scale = scaleFactor.coerceIn(0.70f, 1.45f)
+    val safeWidth = widthScale.coerceIn(0.72f, 1.35f)
+    val safeHeight = heightScale.coerceIn(0.70f, 1.55f)
+    val safeOpacity = opacity.coerceIn(0.20f, 1.0f)
+    val safeWeight = FontWeight(weightLevel.coerceIn(100, 900))
+    val activeFamily = rememberClockFontFamily(font, weightLevel)
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = colAlignment
-    ) {
-        when (face) {
-            HyperOsClockFace.MAGAZINE_STACKED -> {
-                if (showDateAndWeather) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = dateLabel,
-                            fontFamily = font.family,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = (13f * scale).sp,
-                            letterSpacing = 2.4.sp,
-                            color = primaryColor.copy(alpha = 0.90f),
-                            style = TextStyle(shadow = shadow)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(16.dp)
-                                .height(1.5.dp)
-                                .background(primaryColor.copy(alpha = 0.70f))
-                        )
-                        Text(
-                            text = "21°",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = (12f * scale).sp,
-                            color = primaryColor.copy(alpha = 0.90f),
-                            style = TextStyle(shadow = shadow)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                }
-                StyledClockText(
-                    text = hours,
-                    fontFamily = font.family,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (106f * scale).sp,
-                    lineHeight = (92f * scale).sp,
-                    letterSpacing = (-2).sp,
-                    finish = finish,
-                    primaryColor = primaryColor,
-                    secondaryColor = secondaryColor,
-                    textAlign = textAlign
-                )
-                StyledClockText(
-                    text = minutes,
-                    fontFamily = font.family,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (106f * scale).sp,
-                    lineHeight = (90f * scale).sp,
-                    letterSpacing = (-2).sp,
-                    finish = finish,
-                    primaryColor = primaryColor,
-                    secondaryColor = secondaryColor,
-                    textAlign = textAlign
-                )
-            }
-
-            HyperOsClockFace.CLASSIC_HORIZON -> {
-                if (showDateAndWeather) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = dateLabel,
-                            fontFamily = OutfitFontFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = (14f * scale).sp,
-                            letterSpacing = 2.sp,
-                            color = primaryColor.copy(alpha = 0.92f),
-                            style = TextStyle(shadow = shadow)
-                        )
-                        Icon(
-                            imageVector = Icons.Rounded.WbSunny,
-                            contentDescription = null,
-                            tint = secondaryColor,
-                            modifier = Modifier.size((15f * scale).dp)
-                        )
-                        Text(
-                            text = "21°",
-                            fontFamily = OutfitFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = (14f * scale).sp,
-                            color = primaryColor.copy(alpha = 0.92f),
-                            style = TextStyle(shadow = shadow)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-                StyledClockText(
-                    text = "$hours:$minutes",
-                    fontFamily = font.family,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (88f * scale).sp,
-                    lineHeight = (88f * scale).sp,
-                    letterSpacing = (-2.5).sp,
-                    finish = finish,
-                    primaryColor = primaryColor,
-                    secondaryColor = secondaryColor,
-                    textAlign = textAlign
-                )
-            }
-
-            HyperOsClockFace.ATELIER_SERIF -> {
-                if (showDateAndWeather) {
-                    Text(
-                        text = dateLabel.lowercase(Locale.getDefault())
-                            .replaceFirstChar { it.titlecase(Locale.getDefault()) },
-                        fontFamily = CormorantFontFamily,
-                        fontStyle = FontStyle.Italic,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = (19f * scale).sp,
-                        letterSpacing = 1.2.sp,
-                        color = primaryColor.copy(alpha = 0.92f),
-                        style = TextStyle(shadow = shadow)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                }
-                StyledClockText(
-                    text = "$hours:$minutes",
-                    fontFamily = font.family,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (94f * scale).sp,
-                    lineHeight = (90f * scale).sp,
-                    letterSpacing = (-1).sp,
-                    finish = finish,
-                    primaryColor = primaryColor,
-                    secondaryColor = secondaryColor,
-                    textAlign = textAlign
-                )
-                if (showDateAndWeather) {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .width(46.dp)
-                            .height(1.5.dp)
-                            .background(secondaryColor.copy(alpha = 0.85f))
-                    )
-                }
-            }
-
-            HyperOsClockFace.VERTICAL_SEAL -> {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(horizontalAlignment = colAlignment) {
-                        StyledClockText(
-                            text = hours,
-                            fontFamily = font.family,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = (90f * scale).sp,
-                            lineHeight = (80f * scale).sp,
-                            letterSpacing = (-2).sp,
-                            finish = finish,
-                            primaryColor = primaryColor,
-                            secondaryColor = secondaryColor,
-                            textAlign = textAlign
-                        )
-                        StyledClockText(
-                            text = minutes,
-                            fontFamily = font.family,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = (90f * scale).sp,
-                            lineHeight = (80f * scale).sp,
-                            letterSpacing = (-2).sp,
-                            finish = finish,
-                            primaryColor = secondaryColor,
-                            secondaryColor = primaryColor,
-                            textAlign = textAlign
-                        )
-                    }
-                    if (showDateAndWeather) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            shape = RoundedCornerShape(14.dp),
-                            tonalElevation = 2.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = dateLabel.substringBefore(","),
-                                    fontFamily = SpaceGroteskFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = (11f * scale).sp,
-                                    letterSpacing = 1.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .width(14.dp)
-                                        .height(1.dp)
-                                        .background(MaterialTheme.colorScheme.outline)
-                                )
-                                Text(
-                                    text = dateLabel.substringAfter(", ").ifBlank { "15" },
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = (11f * scale).sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            HyperOsClockFace.KINETIC_MONO -> {
-                if (showDateAndWeather) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(50),
-                        tonalElevation = 2.dp
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = dateLabel,
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = (11f * scale).sp,
-                                letterSpacing = 1.2.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "•",
-                                fontSize = (11f * scale).sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "21°C CLEAR",
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Normal,
-                                fontSize = (11f * scale).sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                }
-                Row(verticalAlignment = Alignment.Bottom) {
-                    StyledClockText(
-                        text = "$hours:$minutes",
-                        fontFamily = font.family,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = (78f * scale).sp,
-                        lineHeight = (78f * scale).sp,
-                        letterSpacing = (-3).sp,
-                        finish = finish,
-                        primaryColor = primaryColor,
-                        secondaryColor = secondaryColor,
-                        textAlign = textAlign
-                    )
-                    Text(
-                        text = ":$seconds",
-                        fontFamily = JetBrainsMonoFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = (24f * scale).sp,
-                        color = secondaryColor.copy(alpha = 0.94f),
-                        modifier = Modifier.padding(start = 4.dp, bottom = 12.dp),
-                        style = TextStyle(shadow = shadow)
-                    )
-                }
-            }
-        }
+    val transformOrigin = when (alignment) {
+        ClockHorizontalAlign.START -> TransformOrigin(0f, 0.25f)
+        ClockHorizontalAlign.CENTER -> TransformOrigin(0.5f, 0.25f)
+        ClockHorizontalAlign.END -> TransformOrigin(1f, 0.25f)
     }
-}
 
-@Composable
-private fun StyledClockText(
-    text: String,
-    fontFamily: FontFamily,
-    fontWeight: FontWeight,
-    fontSize: TextUnit,
-    lineHeight: TextUnit,
-    letterSpacing: TextUnit,
-    finish: HyperOsClockFinish,
-    primaryColor: Color,
-    secondaryColor: Color,
-    textAlign: TextAlign
-) {
-    val ambientShadow = Shadow(
-        color = Color.Black.copy(alpha = 0.40f),
-        offset = Offset(0f, 6f),
-        blurRadius = 18f
-    )
-    when (finish) {
-        HyperOsClockFinish.SOLID -> {
-            Text(
-                text = text,
-                textAlign = textAlign,
-                style = TextStyle(
-                    fontFamily = fontFamily,
-                    fontWeight = fontWeight,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    letterSpacing = letterSpacing,
-                    color = primaryColor,
-                    shadow = ambientShadow
-                )
-            )
-        }
-
-        HyperOsClockFinish.DUO_GRADIENT -> {
-            Text(
-                text = text,
-                textAlign = textAlign,
-                style = TextStyle(
-                    fontFamily = fontFamily,
-                    fontWeight = fontWeight,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    letterSpacing = letterSpacing,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(primaryColor, secondaryColor)
-                    ),
-                    shadow = ambientShadow
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun HyperOsClockFaceThumbnail(
-    face: HyperOsClockFace,
-    selected: Boolean,
-    accentColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = if (selected) 4.dp else 1.dp,
-        modifier = modifier.size(width = 88.dp, height = 84.dp)
-    ) {
+    val clockContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = colAlignment
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.inverseSurface,
-                                accentColor.copy(alpha = 0.55f)
-                            )
-                        ),
-                        RoundedCornerShape(10.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                when (face) {
-                    HyperOsClockFace.MAGAZINE_STACKED -> {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("09", fontFamily = OswaldFontFamily, fontWeight = FontWeight.Bold, fontSize = 16.sp, lineHeight = 14.sp, color = Color.White)
-                            Text("41", fontFamily = OswaldFontFamily, fontWeight = FontWeight.Bold, fontSize = 16.sp, lineHeight = 14.sp, color = Color.White)
-                        }
-                    }
-                    HyperOsClockFace.CLASSIC_HORIZON -> {
-                        Text("09:41", fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                    }
-                    HyperOsClockFace.ATELIER_SERIF -> {
-                        Text("09:41", fontFamily = CormorantFontFamily, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color.White)
-                    }
-                    HyperOsClockFace.VERTICAL_SEAL -> {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("09", fontFamily = SyneFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 12.sp, color = Color.White)
-                                Text("41", fontFamily = SyneFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 12.sp, color = Color(0xFFE7DEFF))
-                            }
-                            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(4.dp)) {
-                                Text("15", fontFamily = JetBrainsMonoFontFamily, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 3.dp, vertical = 4.dp))
-                            }
-                        }
-                    }
-                    HyperOsClockFace.KINETIC_MONO -> {
-                        Text("09:41:28", fontFamily = JetBrainsMonoFontFamily, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color.White)
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = face.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
+            RenderHyperOsClockFace(
+                face = face,
+                parts = parts,
+                fontFamily = activeFamily,
+                fontWeight = safeWeight,
+                weightLevel = weightLevel,
+                finish = finish,
+                primaryColor = primaryColor,
+                secondaryColor = secondaryColor,
+                scale = scale,
+                opacity = safeOpacity,
+                showDateAndWeather = showDateAndWeather,
+                colAlignment = colAlignment,
+                textAlign = textAlign
             )
         }
     }
-}
 
-private data class ClockTimeParts(
-    val hours: String,
-    val minutes: String,
-    val seconds: String,
-    val dateLabel: String
-)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = safeWidth
+                scaleY = safeHeight
+                this.transformOrigin = transformOrigin
+                alpha = safeOpacity
+            },
+        contentAlignment = when (alignment) {
+            ClockHorizontalAlign.START -> Alignment.TopStart
+            ClockHorizontalAlign.CENTER -> Alignment.TopCenter
+            ClockHorizontalAlign.END -> Alignment.TopEnd
+        }
+    ) {
+        if (finish == HyperOsClockFinish.BLUR_GLASS) {
+            val glassShape = RoundedCornerShape(32.dp)
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .clip(glassShape)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    primaryColor.copy(alpha = 0.20f),
+                                    secondaryColor.copy(alpha = 0.16f),
+                                    Color.White.copy(alpha = 0.10f)
+                                )
+                            )
+                        )
+                        .let { mod ->
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                mod.blur(18.dp)
+                            } else {
+                                mod
+                            }
+                        }
+                        .border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.30f),
+                            shape = glassShape
+                        )
+                )
+                Box(modifier = Modifier.padding(vertical = 10.dp)) {
+                    clockContent()
+                }
+            }
+        } else {
+            clockContent()
+        }
+    }
+}

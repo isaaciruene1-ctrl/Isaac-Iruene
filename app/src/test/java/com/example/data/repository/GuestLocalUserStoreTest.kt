@@ -41,12 +41,15 @@ class GuestLocalUserStoreTest {
         val updated = store.observeCollections(guestId).first().first { it.id == colId }
         assertEquals(listOf("abs_01", "dep_01"), updated.wallpaperIds)
 
+        assertFalse(store.observePreferences(guestId).first().homeCategoryChipsEnabled)
+
         assertTrue(
             store.updatePreferences(guestId) {
                 it.copy(
                     themeMode = ThemeMode.DARK.name,
                     amoledDark = true,
                     imageQuality = ImageQualityPref.HIGH.name,
+                    homeCategoryChipsEnabled = true,
                     recentSearches = listOf("pastel")
                 )
             }.isSuccess
@@ -57,6 +60,7 @@ class GuestLocalUserStoreTest {
         assertTrue(reloaded.observeFavorites(guestId).first().any { it.wallpaperId == "nat_01" })
         assertEquals(ThemeMode.DARK.name, reloaded.observePreferences(guestId).first().themeMode)
         assertTrue(reloaded.observePreferences(guestId).first().amoledDark)
+        assertTrue(reloaded.observePreferences(guestId).first().homeCategoryChipsEnabled)
         assertEquals(listOf("pastel"), reloaded.observePreferences(guestId).first().recentSearches)
 
         assertTrue(reloaded.removeFavorite(guestId, "nat_01").isSuccess)

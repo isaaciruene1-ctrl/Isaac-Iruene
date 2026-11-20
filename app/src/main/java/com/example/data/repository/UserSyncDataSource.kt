@@ -1,10 +1,12 @@
 package com.example.data.repository
 
 import android.content.Context
+import androidx.core.content.edit
 import com.example.data.model.FavoriteDoc
 import com.example.data.model.ImageQualityPref
 import com.example.data.model.RecentlyViewedDoc
 import com.example.data.model.ThemeMode
+import com.example.data.model.UiStyleMode
 import com.example.data.model.UserCollectionDoc
 import com.example.data.model.UserPreferencesDoc
 import com.google.firebase.Timestamp
@@ -249,7 +251,7 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
     private fun saveFavorites(list: List<FavoriteDoc>) {
         val arr = JSONArray()
         list.forEach { arr.put(it.wallpaperId) }
-        prefs.edit().putString(KEY_FAVORITES, arr.toString()).apply()
+        prefs.edit { putString(KEY_FAVORITES, arr.toString()) }
     }
 
     private fun loadCollections(): List<UserCollectionDoc> {
@@ -295,7 +297,7 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
             }
             arr.put(obj)
         }
-        prefs.edit().putString(KEY_COLLECTIONS, arr.toString()).apply()
+        prefs.edit { putString(KEY_COLLECTIONS, arr.toString()) }
     }
 
     private fun loadRecentlyViewed(): List<RecentlyViewedDoc> {
@@ -316,7 +318,7 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
     private fun saveRecentlyViewed(list: List<RecentlyViewedDoc>) {
         val arr = JSONArray()
         list.forEach { arr.put(it.wallpaperId) }
-        prefs.edit().putString(KEY_RECENTLY_VIEWED, arr.toString()).apply()
+        prefs.edit { putString(KEY_RECENTLY_VIEWED, arr.toString()) }
     }
 
     private fun loadPreferences(): UserPreferencesDoc {
@@ -338,18 +340,23 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
             imageQuality = prefs.getString(KEY_IMAGE_QUALITY, ImageQualityPref.ORIGINAL.name)
                 ?: ImageQualityPref.ORIGINAL.name,
             wifiOnlyDownloads = prefs.getBoolean(KEY_WIFI_ONLY, false),
-            recentSearches = searches
+            recentSearches = searches,
+            homeCategoryChipsEnabled = prefs.getBoolean(KEY_HOME_CATEGORY_CHIPS, false),
+            uiStyle = prefs.getString(KEY_UI_STYLE, UiStyleMode.MATERIAL_3.name)
+                ?: UiStyleMode.MATERIAL_3.name
         )
     }
 
     private fun savePreferences(doc: UserPreferencesDoc) {
-        prefs.edit()
-            .putString(KEY_THEME_MODE, doc.themeMode)
-            .putBoolean(KEY_AMOLED_DARK, doc.amoledDark)
-            .putString(KEY_IMAGE_QUALITY, doc.imageQuality)
-            .putBoolean(KEY_WIFI_ONLY, doc.wifiOnlyDownloads)
-            .putString(KEY_SEARCHES, JSONArray(doc.recentSearches.take(15)).toString())
-            .apply()
+        prefs.edit {
+            putString(KEY_THEME_MODE, doc.themeMode)
+            putBoolean(KEY_AMOLED_DARK, doc.amoledDark)
+            putString(KEY_IMAGE_QUALITY, doc.imageQuality)
+            putBoolean(KEY_WIFI_ONLY, doc.wifiOnlyDownloads)
+            putString(KEY_SEARCHES, JSONArray(doc.recentSearches.take(15)).toString())
+            putBoolean(KEY_HOME_CATEGORY_CHIPS, doc.homeCategoryChipsEnabled)
+            putString(KEY_UI_STYLE, doc.uiStyle)
+        }
     }
 
     companion object {
@@ -363,5 +370,7 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
         private const val KEY_IMAGE_QUALITY = "image_quality"
         private const val KEY_WIFI_ONLY = "wifi_only"
         private const val KEY_SEARCHES = "recent_searches"
+        private const val KEY_HOME_CATEGORY_CHIPS = "home_category_chips_enabled"
+        private const val KEY_UI_STYLE = "ui_style"
     }
 }

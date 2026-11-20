@@ -1,7 +1,6 @@
 package com.example.ui.screens
 
 import android.content.Intent
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,15 +19,20 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
@@ -38,6 +42,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -63,6 +68,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,14 +80,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.media.WallpaperTarget
+import com.example.data.model.UiStyleMode
 import com.example.data.repository.AiAspectRatio
 import com.example.data.repository.AiImageModelTier
 import com.example.data.repository.AiImageResolution
+import com.example.ui.theme.LocalDarkThemeFlag
+import com.example.ui.theme.LocalUiStyleMode
 import com.example.ui.viewmodel.AiAnalysisUiState
 import com.example.ui.viewmodel.AiImageUiState
 import com.example.ui.viewmodel.AiStudioTab
@@ -94,16 +107,20 @@ fun AiStudioSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
+    val capabilities by viewModel.capabilities.collectAsStateWithLifecycle()
     val prompt by viewModel.prompt.collectAsStateWithLifecycle()
     val modelTier by viewModel.modelTier.collectAsStateWithLifecycle()
     val resolution by viewModel.resolution.collectAsStateWithLifecycle()
     val aspectRatio by viewModel.aspectRatio.collectAsStateWithLifecycle()
     val referenceBitmap by viewModel.referenceBitmap.collectAsStateWithLifecycle()
+    val isLoadingReference by viewModel.isLoadingReference.collectAsStateWithLifecycle()
     val imageUiState by viewModel.imageUiState.collectAsStateWithLifecycle()
     val isPolishing by viewModel.isPolishingPrompt.collectAsStateWithLifecycle()
+    val isSavingOrApplying by viewModel.isSavingOrApplying.collectAsStateWithLifecycle()
 
     val analysisBitmap by viewModel.analysisBitmap.collectAsStateWithLifecycle()
     val analysisUiState by viewModel.analysisUiState.collectAsStateWithLifecycle()
@@ -111,7 +128,9 @@ fun AiStudioSheet(
     val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
     val isChatSending by viewModel.isChatSending.collectAsStateWithLifecycle()
     val chatError by viewModel.chatError.collectAsStateWithLifecycle()
+    val lastFailedPrompt by viewModel.lastFailedPrompt.collectAsStateWithLifecycle()
     val actionStatus by viewModel.actionStatus.collectAsStateWithLifecycle()
+    val actionIsError by viewModel.actionIsError.collectAsStateWithLifecycle()
 
     val pickReferenceLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -127,15 +146,25 @@ fun AiStudioSheet(
 
     var showApplyTargetDialog by remember { mutableStateOf(false) }
 
+    val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
+    val isDark = LocalDarkThemeFlag.current
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = if (isGlass) {
+            MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = if (isDark) 0.90f else 0.94f)
+        } else {
+            androidx.compose.material3.BottomSheetDefaults.ContainerColor
+        },
         modifier = Modifier.testTag("ai_studio_sheet")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(bottom = 16.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -166,7 +195,8 @@ fun AiStudioSheet(
 
             if (actionStatus != null) {
                 Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    color = if (actionIsError) MaterialTheme.colorScheme.errorContainer
+                    else MaterialTheme.colorScheme.secondaryContainer,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -180,7 +210,8 @@ fun AiStudioSheet(
                         Text(
                             text = actionStatus.orEmpty(),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            color = if (actionIsError) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = viewModel::clearStatus) {
@@ -190,10 +221,31 @@ fun AiStudioSheet(
                 }
             }
 
-            TabRow(selectedTabIndex = activeTab.ordinal) {
-                AiStudioTab.entries.forEach { tab ->
+            val visibleTabs = remember(capabilities) {
+                buildList {
+                    if (capabilities.imageGenAvailable) add(AiStudioTab.CREATE_EDIT)
+                    if (capabilities.textAndVisionAvailable) {
+                        add(AiStudioTab.ANALYZE)
+                        add(AiStudioTab.CURATOR)
+                    }
+                }
+            }
+
+            LaunchedEffect(visibleTabs, activeTab) {
+                if (visibleTabs.isEmpty()) {
+                    onDismiss()
+                } else if (activeTab !in visibleTabs) {
+                    viewModel.selectTab(visibleTabs.first())
+                }
+            }
+
+            if (visibleTabs.isEmpty()) return@Column
+            val currentTab = if (activeTab in visibleTabs) activeTab else visibleTabs.first()
+
+            TabRow(selectedTabIndex = visibleTabs.indexOf(currentTab).coerceAtLeast(0)) {
+                visibleTabs.forEach { tab ->
                     Tab(
-                        selected = activeTab == tab,
+                        selected = currentTab == tab,
                         onClick = { viewModel.selectTab(tab) },
                         text = { Text(tab.label, maxLines = 1) },
                         modifier = Modifier.testTag("ai_tab_${tab.name}")
@@ -201,13 +253,22 @@ fun AiStudioSheet(
                 }
             }
 
-            when (activeTab) {
+            when (currentTab) {
                 AiStudioTab.CREATE_EDIT -> {
+                    val createScrollState = rememberScrollState()
+
+                    // Scroll automatically so the active spinner, generated artwork, or error is always visible
+                    LaunchedEffect(imageUiState) {
+                        if (imageUiState !is AiImageUiState.Idle) {
+                            createScrollState.animateScrollTo(createScrollState.maxValue)
+                        }
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 560.dp)
-                            .verticalScroll(rememberScrollState())
+                            .heightIn(max = 580.dp)
+                            .verticalScroll(createScrollState)
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -220,10 +281,20 @@ fun AiStudioSheet(
                             maxLines = 4,
                             trailingIcon = {
                                 TextButton(
-                                    onClick = viewModel::polishCurrentPrompt,
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        viewModel.polishCurrentPrompt()
+                                    },
                                     enabled = prompt.isNotBlank() && !isPolishing
                                 ) {
-                                    Text(if (isPolishing) "..." else "Polish")
+                                    if (isPolishing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text("Polish")
+                                    }
                                 }
                             },
                             modifier = Modifier
@@ -242,6 +313,7 @@ fun AiStudioSheet(
                                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                     )
                                 },
+                                enabled = !isLoadingReference && imageUiState !is AiImageUiState.Loading,
                                 modifier = Modifier.testTag("ai_pick_reference_button")
                             ) {
                                 Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -249,30 +321,47 @@ fun AiStudioSheet(
                                 Text(if (referenceBitmap == null) "Add Reference Photo" else "Change Reference")
                             }
 
-                            referenceBitmap?.let { bmp ->
-                                Box(modifier = Modifier.size(48.dp)) {
-                                    Image(
-                                        bitmap = bmp.asImageBitmap(),
-                                        contentDescription = "Reference image preview",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .clip(RoundedCornerShape(10.dp))
+                            if (isLoadingReference) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
                                     )
-                                    Surface(
-                                        color = Color.Black.copy(alpha = 0.65f),
-                                        shape = CircleShape,
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .size(20.dp)
-                                            .clickable { viewModel.clearReferenceBitmap() }
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.Close,
-                                            contentDescription = "Clear reference image",
-                                            tint = Color.White,
-                                            modifier = Modifier.padding(2.dp)
+                                    Text(
+                                        text = "Loading photo...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                referenceBitmap?.let { bmp ->
+                                    Box(modifier = Modifier.size(48.dp)) {
+                                        Image(
+                                            bitmap = bmp.asImageBitmap(),
+                                            contentDescription = "Reference image preview",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .clip(RoundedCornerShape(10.dp))
                                         )
+                                        Surface(
+                                            color = Color.Black.copy(alpha = 0.65f),
+                                            shape = CircleShape,
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .size(20.dp)
+                                                .clickable { viewModel.clearReferenceBitmap() }
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Close,
+                                                contentDescription = "Clear reference image",
+                                                tint = Color.White,
+                                                modifier = Modifier.padding(2.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -319,17 +408,30 @@ fun AiStudioSheet(
                         }
 
                         Button(
-                            onClick = viewModel::generateOrEdit,
-                            enabled = imageUiState !is AiImageUiState.Loading && prompt.isNotBlank(),
+                            onClick = {
+                                focusManager.clearFocus()
+                                viewModel.generateOrEdit()
+                            },
+                            enabled = imageUiState !is AiImageUiState.Loading && !isLoadingReference && prompt.isNotBlank(),
                             shape = RoundedCornerShape(50),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
                                 .testTag("ai_generate_button")
                         ) {
-                            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (referenceBitmap != null) "Remix with Gemini" else "Create Wallpaper")
+                            if (imageUiState is AiImageUiState.Loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(if (referenceBitmap != null) "Remixing Artwork..." else "Creating Wallpaper...")
+                            } else {
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(if (referenceBitmap != null) "Remix with Gemini" else "Create Wallpaper")
+                            }
                         }
 
                         when (val st = imageUiState) {
@@ -364,12 +466,24 @@ fun AiStudioSheet(
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = st.message,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.padding(14.dp)
-                                    )
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = st.message,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        OutlinedButton(
+                                            onClick = viewModel::generateOrEdit,
+                                            shape = RoundedCornerShape(50)
+                                        ) {
+                                            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Try Again")
+                                        }
+                                    }
                                 }
                             }
                             is AiImageUiState.Success -> {
@@ -387,12 +501,22 @@ fun AiStudioSheet(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        FilledTonalButton(onClick = viewModel::saveGeneratedToPictures) {
-                                            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        FilledTonalButton(
+                                            onClick = viewModel::saveGeneratedToPictures,
+                                            enabled = !isSavingOrApplying
+                                        ) {
+                                            if (isSavingOrApplying) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            }
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text("Save")
                                         }
-                                        Button(onClick = { showApplyTargetDialog = true }) {
+                                        Button(
+                                            onClick = { showApplyTargetDialog = true },
+                                            enabled = !isSavingOrApplying
+                                        ) {
                                             Icon(Icons.Rounded.Wallpaper, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text("Apply")
@@ -410,11 +534,18 @@ fun AiStudioSheet(
                 }
 
                 AiStudioTab.ANALYZE -> {
+                    val analyzeScrollState = rememberScrollState()
+                    LaunchedEffect(analysisUiState) {
+                        if (analysisUiState !is AiAnalysisUiState.Idle) {
+                            analyzeScrollState.animateScrollTo(analyzeScrollState.maxValue)
+                        }
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 560.dp)
-                            .verticalScroll(rememberScrollState())
+                            .heightIn(max = 580.dp)
+                            .verticalScroll(analyzeScrollState)
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -424,6 +555,7 @@ fun AiStudioSheet(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
                             },
+                            enabled = analysisUiState !is AiAnalysisUiState.Loading,
                             shape = RoundedCornerShape(50),
                             modifier = Modifier.fillMaxWidth().testTag("ai_analyze_pick_button")
                         ) {
@@ -453,11 +585,22 @@ fun AiStudioSheet(
                                 )
                             }
                             AiAnalysisUiState.Loading -> {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                    contentAlignment = Alignment.Center
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    CircularProgressIndicator()
+                                    Column(
+                                        modifier = Modifier.padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        CircularProgressIndicator()
+                                        Text(
+                                            "Analyzing mood, color palette & depth headroom...",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
                                 }
                             }
                             is AiAnalysisUiState.Error -> {
@@ -466,11 +609,26 @@ fun AiStudioSheet(
                                     shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = st.message,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.padding(14.dp)
-                                    )
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = st.message,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        if (analysisBitmap != null) {
+                                            OutlinedButton(
+                                                onClick = viewModel::analyzeCurrentBitmap,
+                                                shape = RoundedCornerShape(50)
+                                            ) {
+                                                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Retry Analysis")
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             is AiAnalysisUiState.Success -> {
@@ -502,7 +660,7 @@ fun AiStudioSheet(
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 res.dominantHexColors.forEach { hex ->
                                                     val parsedColor = runCatching {
-                                                        Color(android.graphics.Color.parseColor(hex))
+                                                        Color(hex.toColorInt())
                                                     }.getOrDefault(MaterialTheme.colorScheme.primary)
                                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                         Box(
@@ -517,7 +675,7 @@ fun AiStudioSheet(
                                             }
                                         }
 
-                                        if (res.suggestedRemixPrompt.isNotBlank()) {
+                                        if (res.suggestedRemixPrompt.isNotBlank() && capabilities.imageGenAvailable) {
                                             FilledTonalButton(
                                                 onClick = { viewModel.applyAnalyzedPromptToStudio(res.suggestedRemixPrompt) },
                                                 modifier = Modifier.fillMaxWidth()
@@ -534,16 +692,24 @@ fun AiStudioSheet(
 
                 AiStudioTab.CURATOR -> {
                     var chatInput by remember { mutableStateOf("") }
+                    val listState = rememberLazyListState()
                     val quickPrompts = listOf(
                         "Best pastel palettes for OLED phones?",
                         "Tips for Depth Studio lock-screen framing",
                         "Current minimalist wallpaper design trends"
                     )
 
+                    val lastTextLength = chatMessages.lastOrNull()?.text?.length ?: 0
+                    LaunchedEffect(chatMessages.size, lastTextLength) {
+                        if (chatMessages.isNotEmpty()) {
+                            listState.animateScrollToItem(chatMessages.lastIndex)
+                        }
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 380.dp, max = 540.dp)
+                            .heightIn(min = 380.dp, max = 560.dp)
                             .padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -551,6 +717,7 @@ fun AiStudioSheet(
                             items(quickPrompts) { suggestion ->
                                 AssistChip(
                                     onClick = { viewModel.sendChatMessage(suggestion) },
+                                    enabled = !isChatSending,
                                     label = { Text(suggestion) }
                                 )
                             }
@@ -562,16 +729,28 @@ fun AiStudioSheet(
                                 shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = chatError.orEmpty(),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.padding(10.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = chatError.orEmpty(),
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (lastFailedPrompt != null) {
+                                        TextButton(onClick = viewModel::retryLastChatMessage) {
+                                            Text("Retry")
+                                        }
+                                    }
+                                }
                             }
                         }
 
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth(),
@@ -593,7 +772,7 @@ fun AiStudioSheet(
                                             verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
-                                                text = msg.text.ifBlank { if (msg.isStreaming) "Thinking..." else "" },
+                                                text = msg.text.ifBlank { if (msg.isStreaming) "Curating response..." else "" },
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = if (msg.isUser) MaterialTheme.colorScheme.onPrimaryContainer
                                                 else MaterialTheme.colorScheme.onSurface
@@ -607,7 +786,7 @@ fun AiStudioSheet(
                                                         AssistChip(
                                                             onClick = {
                                                                 runCatching {
-                                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(src.uri))
+                                                                    val intent = Intent(Intent.ACTION_VIEW, src.uri.toUri())
                                                                     context.startActivity(intent)
                                                                 }
                                                             },
@@ -635,17 +814,35 @@ fun AiStudioSheet(
                                 onValueChange = { chatInput = it },
                                 placeholder = { Text("Ask BACKDROP Curator...") },
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(
+                                    onSend = {
+                                        if (chatInput.isNotBlank() && !isChatSending) {
+                                            viewModel.sendChatMessage(chatInput)
+                                            chatInput = ""
+                                            focusManager.clearFocus()
+                                        }
+                                    }
+                                ),
                                 modifier = Modifier.weight(1f).testTag("ai_chat_input")
                             )
                             IconButton(
                                 onClick = {
                                     viewModel.sendChatMessage(chatInput)
                                     chatInput = ""
+                                    focusManager.clearFocus()
                                 },
                                 enabled = chatInput.isNotBlank() && !isChatSending,
                                 modifier = Modifier.size(48.dp).testTag("ai_chat_send")
                             ) {
-                                Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send curator message")
+                                if (isChatSending) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send curator message")
+                                }
                             }
                         }
                     }

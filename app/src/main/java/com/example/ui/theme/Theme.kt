@@ -10,10 +10,17 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.model.ThemeMode
+import com.example.data.model.UiStyleMode
+
+val LocalUiStyleMode = staticCompositionLocalOf { UiStyleMode.MATERIAL_3 }
+val LocalDarkThemeFlag = staticCompositionLocalOf { false }
+val LocalAmoledDarkFlag = staticCompositionLocalOf { false }
 
 private val PastelLightColorScheme = lightColorScheme(
     primary = PastelPeriwinkle,
@@ -85,6 +92,7 @@ val BackdropShapes = Shapes(
 fun BackdropTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     amoledDark: Boolean = false,
+    uiStyle: UiStyleMode = UiStyleMode.MATERIAL_3,
     useDynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -116,10 +124,16 @@ fun BackdropTheme(
         baseScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = BackdropShapes,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalUiStyleMode provides uiStyle,
+        LocalDarkThemeFlag provides isDark,
+        LocalAmoledDarkFlag provides (isDark && amoledDark)
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = BackdropShapes,
+            content = content
+        )
+    }
 }

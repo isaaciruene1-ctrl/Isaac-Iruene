@@ -76,6 +76,8 @@ service cloud.firestore {
              data.amoledDark is bool &&
              data.imageQuality in ['ORIGINAL', 'HIGH', 'BALANCED'] &&
              data.wifiOnlyDownloads is bool &&
+             (!('homeCategoryChipsEnabled' in data) || data.homeCategoryChipsEnabled is bool) &&
+             (!('uiStyle' in data) || data.uiStyle in ['MATERIAL_3', 'FROSTED_GLASS_OS']) &&
              data.recentSearches is list &&
              data.recentSearches.size() <= 15 &&
              (data.recentSearches.size() == 0 || data.recentSearches[0] is string) &&
@@ -140,14 +142,14 @@ service cloud.firestore {
         allow create: if isOwner(userId) &&
                          prefId == 'settings' &&
                          incoming().keys().hasAll(['userId', 'themeMode', 'amoledDark', 'imageQuality', 'wifiOnlyDownloads', 'recentSearches', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'themeMode', 'amoledDark', 'imageQuality', 'wifiOnlyDownloads', 'recentSearches', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'themeMode', 'amoledDark', 'imageQuality', 'wifiOnlyDownloads', 'recentSearches', 'homeCategoryChipsEnabled', 'uiStyle', 'createdAt', 'updatedAt']) &&
                          isValidUserPreferences(incoming(), userId);
         allow update: if isOwner(userId) &&
                          prefId == 'settings' &&
                          isValidUserPreferences(incoming(), userId) &&
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['themeMode', 'amoledDark', 'imageQuality', 'wifiOnlyDownloads', 'recentSearches', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly(['themeMode', 'amoledDark', 'imageQuality', 'wifiOnlyDownloads', 'recentSearches', 'homeCategoryChipsEnabled', 'uiStyle', 'updatedAt']);
         allow delete: if isOwner(userId) && prefId == 'settings';
       }
     }

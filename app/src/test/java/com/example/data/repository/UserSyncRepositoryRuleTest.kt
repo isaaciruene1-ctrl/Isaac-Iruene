@@ -97,6 +97,7 @@ class UserSyncRepositoryRuleTest : FirestoreEmulatorTestBase() {
                     themeMode = ThemeMode.DARK.name,
                     amoledDark = true,
                     imageQuality = ImageQualityPref.HIGH.name,
+                    uiStyle = com.example.data.model.UiStyleMode.FROSTED_GLASS_OS.name,
                     recentSearches = listOf("pastel", "depth")
                 )
             }
@@ -107,6 +108,7 @@ class UserSyncRepositoryRuleTest : FirestoreEmulatorTestBase() {
             repo.observePreferences(aliceUid).first { it.amoledDark }
         }
         assertEquals(ThemeMode.DARK.name, prefs.themeMode)
+        assertEquals(com.example.data.model.UiStyleMode.FROSTED_GLASS_OS.name, prefs.uiStyle)
         assertEquals(listOf("pastel", "depth"), prefs.recentSearches)
     }
 

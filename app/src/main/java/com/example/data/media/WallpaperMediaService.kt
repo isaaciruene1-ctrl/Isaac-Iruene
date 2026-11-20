@@ -94,13 +94,17 @@ class WallpaperMediaService(private val context: Context) {
             .ifEmpty { wallpaper.id }
         val baseName = "BACKDROP_${sanitizedTitle}_${wallpaper.id}"
 
-        val bytes = try {
-            fetchBytesWithProgress(wallpaper.fullResUrl) { progress, read, total ->
-                emit(DownloadProgress.InProgress(progress, read, total))
-            }
-        } catch (_: Exception) {
-            // Fall back to bundled drawable artwork if offline or remote unreachable
+        val bytes = if (wallpaper.isBundledAsset) {
             decodeDrawableToJpeg(wallpaper.fallbackResId)
+        } else {
+            try {
+                fetchBytesWithProgress(wallpaper.fullResUrl) { progress, read, total ->
+                    emit(DownloadProgress.InProgress(progress, read, total))
+                }
+            } catch (_: Exception) {
+                // Fall back to bundled drawable artwork if offline or remote unreachable
+                decodeDrawableToJpeg(wallpaper.fallbackResId)
+            }
         }
 
         if (bytes.isEmpty()) {
@@ -148,42 +152,38 @@ class WallpaperMediaService(private val context: Context) {
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val manager = WallpaperManager.getInstance(context.applicationContext)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !manager.isWallpaperSupported) {
+            if (!manager.isWallpaperSupported) {
                 return@withContext Result.failure(IllegalStateException("Setting wallpapers is not supported on this device."))
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && !manager.isSetWallpaperAllowed) {
+            if (!manager.isSetWallpaperAllowed) {
                 return@withContext Result.failure(IllegalStateException("Device policy restricts changing the wallpaper."))
             }
 
             val safeBitmap = if (bitmap.config == Bitmap.Config.ARGB_8888) {
                 bitmap
             } else {
-                bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                val flags = when (target) {
-                    WallpaperTarget.HOME -> WallpaperManager.FLAG_SYSTEM
-                    WallpaperTarget.LOCK -> WallpaperManager.FLAG_LOCK
-                    WallpaperTarget.BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+            val flags = when (target) {
+                WallpaperTarget.HOME -> WallpaperManager.FLAG_SYSTEM
+                WallpaperTarget.LOCK -> WallpaperManager.FLAG_LOCK
+                WallpaperTarget.BOTH -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+            }
+            val jpegBytes = ByteArrayOutputStream().use { out ->
+                safeBitmap.compress(Bitmap.CompressFormat.JPEG, 96, out)
+                out.toByteArray()
+            }
+            val streamId = ByteArrayInputStream(jpegBytes).use { input ->
+                manager.setStream(input, null, true, flags)
+            }
+            if (streamId == 0) {
+                val bmpId = manager.setBitmap(safeBitmap, null, true, flags)
+                if (bmpId == 0) {
+                    return@withContext Result.failure(
+                        IllegalStateException("System WallpaperManager rejected the wallpaper update.")
+                    )
                 }
-                val jpegBytes = ByteArrayOutputStream().use { out ->
-                    safeBitmap.compress(Bitmap.CompressFormat.JPEG, 96, out)
-                    out.toByteArray()
-                }
-                val streamId = ByteArrayInputStream(jpegBytes).use { input ->
-                    manager.setStream(input, null, true, flags)
-                }
-                if (streamId == 0) {
-                    val bmpId = manager.setBitmap(safeBitmap, null, true, flags)
-                    if (bmpId == 0) {
-                        return@withContext Result.failure(
-                            IllegalStateException("System WallpaperManager rejected the wallpaper update.")
-                        )
-                    }
-                }
-            } else {
-                manager.setBitmap(safeBitmap)
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -222,6 +222,9 @@ class WallpaperMediaService(private val context: Context) {
         val opts = BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.ARGB_8888
             inScaled = false
+        }
+        if (wallpaper.isBundledAsset) {
+            return@withContext BitmapFactory.decodeResource(context.resources, wallpaper.fallbackResId, opts)
         }
         // Check Coil disk cache first so already-displayed wallpapers load instantly
         try {

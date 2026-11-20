@@ -10,7 +10,7 @@ object WallpaperCatalog {
 
     // Ensure every wallpaper has a strictly unique Unsplash photo slug so zero duplicates appear
     val allWallpapers: List<Wallpaper> by lazy {
-        val raw = buildCatalogPartOne() + buildCatalogPartTwo()
+        val raw = buildCatalogPartOne() + buildCatalogPartTwo() + buildCatalogPartThree() + buildCatalogPartFour()
         val seenSlugs = mutableSetOf<String>()
         val fallbackSlugs = listOf(
             "1507525428034-b723cf961d3e",
@@ -106,7 +106,9 @@ object WallpaperCatalog {
             val matchesPortrait = if (filters.portraitOnly) wp.height >= wp.width else true
             val matchesDepth = if (filters.depthStudioOnly) wp.supportsDepthEffect else true
             val matchesColor = filters.colorFamily?.let { wp.colorFamily == it } ?: true
-            val matchesCategory = filters.category?.let { wp.category == it } ?: true
+            val matchesCategory = filters.category?.let { cat ->
+                if (cat == WallpaperCategory.DEPTH_STUDIO) wp.supportsDepthEffect else wp.category == cat
+            } ?: true
             val matchesCollection = filters.collection?.let { col ->
                 when (col) {
                     DiscoveryCollection.DEPTH_STUDIO -> wp.supportsDepthEffect
@@ -133,7 +135,7 @@ object WallpaperCatalog {
     }
 
     val searchSuggestions: List<String> = listOf(
-        "Pastel", "AMOLED", "Depth Studio", "4K", "Mountains",
+        "Pixel", "Pastel", "AMOLED", "Depth Studio", "4K", "Mountains",
         "Minimalist", "Space", "Neon", "Architecture", "Automotive",
         "Kyoto", "Wildlife"
     )

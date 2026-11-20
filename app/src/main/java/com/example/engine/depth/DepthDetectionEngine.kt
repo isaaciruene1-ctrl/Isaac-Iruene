@@ -2,6 +2,8 @@ package com.example.engine.depth
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -53,7 +55,7 @@ class DepthDetectionEngine {
         val coarseBmp = if (fullW == targetCw && fullH == targetCh) {
             fullBmp
         } else {
-            Bitmap.createScaledBitmap(fullBmp, targetCw, targetCh, true)
+            fullBmp.scale(targetCw, targetCh)
         }
 
         val cw = coarseBmp.width
@@ -108,17 +110,18 @@ class DepthDetectionEngine {
         val protoDiv = FloatArray(n)
         computeSkyPrototypeDivergence(smL, smA, smB, topBorderStats, protoDiv)
 
-        // Normalize geodesic barrier distance robustly using 96th percentile so bright outliers don't crush peaks
-        val maxGeo = percentile96(geoDist).coerceAtLeast(1f)
-        val maxDiv = percentile96(protoDiv).coerceAtLeast(1f)
+        // Normalize geodesic barrier distance and sky divergence at the 98.8th percentile so compact
+        // subjects (moons, spires, blossoms covering >= 1.5% of frame) retain full dynamic range.
+        val maxGeo = percentile(geoDist, 0.988f).coerceAtLeast(1f)
+        val maxDiv = percentile(protoDiv, 0.988f).coerceAtLeast(1f)
 
-        // Fuse Geodesic Barrier (primary structural separator) with moderated Sky Divergence
+        // Fuse Geodesic Barrier (primary structural separator) with moderated Sky Divergence.
+        // Max pure-gradient sky contribution is capped at 0.18 * 1.25 = 0.225 < min Otsu tau (0.28).
         val saliency = FloatArray(n)
         for (i in 0 until n) {
             val gNorm = (geoDist[i] / maxGeo).coerceIn(0f, 1.35f)
             val dNorm = (protoDiv[i] / maxDiv).coerceIn(0f, 1.25f)
-            // Geodesic is the dominant cue because it ignores smooth sunset/sky gradients cleanly
-            val fused = (0.76f * gNorm + 0.24f * dNorm).coerceIn(0f, 1f)
+            val fused = (0.82f * gNorm + 0.18f * dNorm).coerceIn(0f, 1f)
             saliency[i] = fused
         }
 
@@ -135,7 +138,7 @@ class DepthDetectionEngine {
         }
 
         // 6. Adaptive Otsu thresholding + Connected-Component Cleanup + Border-Seeded Hole Closing
-        val tau = computeOtsuThreshold(saliency).coerceIn(0.24f, 0.62f)
+        val tau = computeOtsuThreshold(saliency).coerceIn(0.28f, 0.64f)
         val binaryMask = BooleanArray(n) { i -> saliency[i] >= tau }
 
         val cleanedMask = filterComponentsAndCloseHoles(binaryMask, saliency, cw, ch)
@@ -167,10 +170,12 @@ class DepthDetectionEngine {
 
         // 8. Refine coarse alpha matte (sub-pixel boundary transition) and upsample cleanly to full resolution
         val coarseAlpha = buildSoftCoarseAlpha(cleanedMask, saliency, tau, cw, ch)
-        val cutoutBitmap = upsampleCutoutLuminanceGuided(
+        val cutoutBitmap = upsampleCutoutLabGuided(
             fullBitmap = fullBmp,
             coarseAlpha = coarseAlpha,
-            coarseLum = coarseLum,
+            coarseL = rawL,
+            coarseA = rawA,
+            coarseB = rawB,
             cw = cw,
             ch = ch
         )
@@ -200,7 +205,8 @@ class DepthDetectionEngine {
             subjectTopFraction = geometry.peakYFraction,
             subjectPeakXFraction = geometry.peakXFraction,
             foregroundCoverageFraction = geometry.coverageFraction,
-            processingTimeMs = SystemClock.elapsedRealtime() - startMs
+            processingTimeMs = SystemClock.elapsedRealtime() - startMs,
+            recommendedClockOverlapFraction = geometry.clockOcclusionFraction
         )
     }
 
@@ -487,7 +493,7 @@ class DepthDetectionEngine {
         }
     }
 
-    private inline fun stepCost(
+    private fun stepCost(
         q: Int,
         p: Int,
         diagWeight: Float,
@@ -530,7 +536,7 @@ class DepthDetectionEngine {
         }
     }
 
-    private fun percentile96(values: FloatArray): Float {
+    private fun percentile(values: FloatArray, quantile: Float): Float {
         val hist = IntArray(256)
         var maxV = 0f
         for (v in values) {
@@ -542,7 +548,7 @@ class DepthDetectionEngine {
             val bin = if (v.isFinite()) (v * inv).toInt().coerceIn(0, 255) else 255
             hist[bin]++
         }
-        val target = (values.size * 0.96f).toInt()
+        val target = (values.size * quantile).toInt()
         var acc = 0
         for (bin in 0..255) {
             acc += hist[bin]
@@ -558,9 +564,9 @@ class DepthDetectionEngine {
         }
         var acc = 0
         val q20Target = (saliency.size * 0.20f).toInt()
-        val q92Target = (saliency.size * 0.92f).toInt()
+        val q985Target = (saliency.size * 0.985f).toInt()
         var q20 = 0f
-        var q92 = 0f
+        var q985 = 0f
         var found20 = false
         for (b in 0..63) {
             acc += hist[b]
@@ -568,12 +574,12 @@ class DepthDetectionEngine {
                 q20 = b / 63f
                 found20 = true
             }
-            if (acc >= q92Target) {
-                q92 = b / 63f
+            if (acc >= q985Target) {
+                q985 = b / 63f
                 break
             }
         }
-        return q92 - q20
+        return q985 - q20
     }
 
     private fun computeOtsuThreshold(saliency: FloatArray): Float {
@@ -607,6 +613,18 @@ class DepthDetectionEngine {
         return bestBin / 255f
     }
 
+    private data class CandidateComponent(
+        val pixels: IntArray,
+        val area: Int,
+        val meanSaliency: Float,
+        val minY: Int,
+        val maxY: Int,
+        val minX: Int,
+        val maxX: Int,
+        val touchesBottom: Boolean,
+        val dominanceScore: Float
+    )
+
     private fun filterComponentsAndCloseHoles(
         mask: BooleanArray,
         saliency: FloatArray,
@@ -617,9 +635,12 @@ class DepthDetectionEngine {
         val visited = BooleanArray(n)
         val queue = IntArray(n)
         val keep = BooleanArray(n)
-        val minKeepArea = max(12, (n * 0.008f).toInt())
+        val minCandidateArea = max(10, (n * 0.003f).toInt())
+        val minMainArea = max(12, (n * 0.008f).toInt())
 
-        // 1. Keep connected foreground components large enough (or high-contrast celestial orbs)
+        val candidates = ArrayList<CandidateComponent>(8)
+
+        // 1. Collect connected foreground components and score subject dominance
         for (start in 0 until n) {
             if (!mask[start] || visited[start]) continue
             var head = 0
@@ -630,13 +651,17 @@ class DepthDetectionEngine {
             var sumSal = 0f
             var minY = h
             var maxY = 0
+            var minX = w
+            var maxX = 0
             while (head < tail) {
                 val p = queue[head++]
                 sumSal += saliency[p]
                 val py = p / w
+                val px = p - py * w
                 if (py < minY) minY = py
                 if (py > maxY) maxY = py
-                val px = p - py * w
+                if (px < minX) minX = px
+                if (px > maxX) maxX = px
 
                 if (px > 0 && mask[p - 1] && !visited[p - 1]) {
                     visited[p - 1] = true; queue[tail++] = p - 1
@@ -653,12 +678,57 @@ class DepthDetectionEngine {
             }
 
             val area = tail
+            if (area < minCandidateArea) continue
             val meanSal = sumSal / area
-            val isSignificant = area >= minKeepArea ||
-                (area >= (n * 0.003f).toInt() && meanSal > 0.62f && minY > h * 0.04f && maxY < h * 0.90f)
-            if (isSignificant) {
-                for (k in 0 until tail) {
-                    keep[queue[k]] = true
+            val touchesBottom = maxY >= h - max(4, (h * 0.03f).roundToInt())
+            val isSignificant = area >= minMainArea ||
+                (meanSal > 0.58f && minY > h * 0.04f && maxY < h * 0.90f)
+            if (!isSignificant) continue
+
+            // Prefer strong lower-anchored or clean mid-frame silhouettes over top-edge stray wisps
+            val topEdgePenalty = if (minY <= max(2, (h * 0.025f).roundToInt()) && maxY < h * 0.40f) 0.25f else 1.0f
+            val anchorBonus = if (touchesBottom) 1.65f else 1.0f
+            val score = area.toFloat() * meanSal * anchorBonus * topEdgePenalty
+
+            candidates.add(
+                CandidateComponent(
+                    pixels = queue.copyOf(area),
+                    area = area,
+                    meanSaliency = meanSal,
+                    minY = minY,
+                    maxY = maxY,
+                    minX = minX,
+                    maxX = maxX,
+                    touchesBottom = touchesBottom,
+                    dominanceScore = score
+                )
+            )
+        }
+
+        // Retain the dominant foreground subject and only spatially close, substantial companion parts
+        // (strips detached upper clouds, birds, or ceiling vignettes so the silhouette is clean).
+        val dominant = candidates.maxByOrNull { it.dominanceScore }
+        if (dominant != null) {
+            val proxY = (h * 0.10f).roundToInt()
+            val proxX = (w * 0.14f).roundToInt()
+            val minCompanionArea = max(minMainArea, (dominant.area * 0.18f).roundToInt())
+            val upperCutoffY = dominant.minY - (h * 0.12f).roundToInt()
+
+            for (comp in candidates) {
+                val isDominant = comp === dominant
+                val gapX = max(0, max(comp.minX - dominant.maxX, dominant.minX - comp.maxX))
+                val gapY = max(0, max(comp.minY - dominant.maxY, dominant.minY - comp.maxY))
+                val isCohesiveCompanion = !isDominant &&
+                    comp.area >= minCompanionArea &&
+                    comp.minY >= upperCutoffY &&
+                    gapX <= proxX &&
+                    gapY <= proxY &&
+                    (comp.touchesBottom || gapY <= proxY / 2)
+
+                if (isDominant || isCohesiveCompanion) {
+                    for (p in comp.pixels) {
+                        keep[p] = true
+                    }
                 }
             }
         }
@@ -694,8 +764,7 @@ class DepthDetectionEngine {
             if (py < h - 1) tryEnqueueSky(p + w)
         }
 
-        val closed = BooleanArray(n) { i -> !skyReachable[i] }
-        return closed
+        return BooleanArray(n) { i -> !skyReachable[i] }
     }
 
     private data class DepthGeometryEval(
@@ -706,7 +775,8 @@ class DepthDetectionEngine {
         val peakXFraction: Float,
         val coverageFraction: Float,
         val recommendedClockTopFraction: Float,
-        val recommendedAlign: ClockHorizontalAlign
+        val recommendedAlign: ClockHorizontalAlign,
+        val clockOcclusionFraction: Float
     )
 
     private fun evaluateDepthSubjectGeometry(
@@ -723,7 +793,6 @@ class DepthDetectionEngine {
         var minX = w
         var maxX = -1
 
-        // Track topmost foreground pixels to find true peak/crown
         var topBandCount = 0
         var topBandMeanX = 0f
 
@@ -735,8 +804,20 @@ class DepthDetectionEngine {
         var clockBandFg = 0
         var clockBandMeanX = 0f
 
+        // Per-row occupancy across horizontal zones [ALL, LEFT, CENTER, RIGHT] for exact clock sliding solver
+        val rowTotalCenter = FloatArray(h)
+        val rowTotalStart = FloatArray(h)
+        val rowTotalEnd = FloatArray(h)
+        val cStart = (w * 0.22f).roundToInt()
+        val cEnd = (w * 0.78f).roundToInt().coerceAtLeast(cStart + 1)
+        val sEnd = (w * 0.54f).roundToInt().coerceAtLeast(1)
+        val eStart = (w * 0.46f).roundToInt().coerceAtMost(w - 1)
+
         for (y in 0 until h) {
             val row = y * w
+            var cCnt = 0
+            var sCnt = 0
+            var eCnt = 0
             for (x in 0 until w) {
                 if (!mask[row + x]) continue
                 fgCount++
@@ -749,11 +830,17 @@ class DepthDetectionEngine {
                     clockBandFg++
                     clockBandMeanX += x
                 }
+                if (x in cStart until cEnd) cCnt++
+                if (x < sEnd) sCnt++
+                if (x >= eStart) eCnt++
             }
+            rowTotalCenter[y] = cCnt.toFloat() / max(1, cEnd - cStart)
+            rowTotalStart[y] = sCnt.toFloat() / max(1, sEnd)
+            rowTotalEnd[y] = eCnt.toFloat() / max(1, w - eStart)
         }
 
         val coverage = fgCount.toFloat() / n.toFloat()
-        if (fgCount < (n * 0.015f) || coverage > 0.88f || minY >= h) {
+        if (fgCount < (n * 0.012f) || coverage > 0.88f || minY >= h) {
             return DepthGeometryEval(
                 isEligible = false,
                 category = DepthSubjectCategory.FLAT_CANVAS,
@@ -762,7 +849,8 @@ class DepthDetectionEngine {
                 peakXFraction = 0.5f,
                 coverageFraction = coverage,
                 recommendedClockTopFraction = 0.14f,
-                recommendedAlign = ClockHorizontalAlign.CENTER
+                recommendedAlign = ClockHorizontalAlign.CENTER,
+                clockOcclusionFraction = 0f
             )
         }
 
@@ -785,8 +873,7 @@ class DepthDetectionEngine {
         val topClearOcclusion = topClearFg.toFloat() / (topClearEnd * w).toFloat()
         val clockBandCoverage = clockBandFg.toFloat() / max(1, (clockBandEnd - clockBandStart) * w).toFloat()
 
-        // A true Depth Effect wallpaper needs open headroom in the very top AND a subject entering
-        // the clock zone (roughly y in 0.08..0.56).
+        // True depth eligibility requires crisp open top sky and subject intrusion in the upper-mid zone
         val entersClockZone = peakYFrac in 0.03f..0.54f && clockBandCoverage >= 0.018f
         val hasOpenHeadroom = topClearOcclusion < 0.72f
         val isWellSeparated = entersClockZone && hasOpenHeadroom
@@ -804,23 +891,66 @@ class DepthDetectionEngine {
             else -> DepthSubjectCategory.PORTRAIT_FIGURE
         }
 
-        // Compute optimal lock-screen clock vertical anchor so the clock rests naturally behind the peak
-        val recommendedTop = when (category) {
-            DepthSubjectCategory.CELESTIAL_ORB -> {
-                // Float clock right behind top edge of the orb
-                (peakYFrac - 0.05f).coerceIn(0.08f, 0.26f)
-            }
-            else -> {
-                // Place clock above the subject's upper edge so lower numerals tuck behind the crown/peak
-                (peakYFrac - 0.12f).coerceIn(0.07f, 0.26f)
-            }
-        }
-
         val clockMeanX = if (clockBandFg > 0) (clockBandMeanX / clockBandFg) / w.toFloat() else peakXFrac
         val recommendedAlign = when {
             clockBandCoverage < 0.22f && clockMeanX > 0.66f -> ClockHorizontalAlign.START
             clockBandCoverage < 0.22f && clockMeanX < 0.34f -> ClockHorizontalAlign.END
             else -> ClockHorizontalAlign.CENTER
+        }
+
+        val activeRowOccupancy = when (recommendedAlign) {
+            ClockHorizontalAlign.START -> rowTotalStart
+            ClockHorizontalAlign.END -> rowTotalEnd
+            ClockHorizontalAlign.CENTER -> rowTotalCenter
+        }
+
+        // Pinpoint Sliding-Window Lock-Clock Occlusion Solver:
+        // Models a standard clock height of 25% of frame:
+        // - Upper 62% of the clock window ([top, top + 0.155]) should remain clear sky (>= 75% visible).
+        // - Lower 38% of the clock window ([top + 0.155, top + 0.250]) should cleanly tuck behind the subject (~22-38% occluded).
+        val upperRows = max(2, (h * 0.155f).roundToInt())
+        val lowerRows = max(2, (h * 0.095f).roundToInt())
+        val totalWindowRows = upperRows + lowerRows
+        val minStartRow = (h * 0.07f).roundToInt()
+        val maxStartRow = min(h - totalWindowRows - 1, (h * 0.27f).roundToInt())
+
+        var bestTopFrac = when (category) {
+            DepthSubjectCategory.CELESTIAL_ORB -> (peakYFrac - 0.05f).coerceIn(0.08f, 0.26f)
+            else -> (peakYFrac - 0.12f).coerceIn(0.07f, 0.26f)
+        }
+        var bestWindowScore = Float.NEGATIVE_INFINITY
+        var bestLowerOcc = 0f
+
+        if (maxStartRow > minStartRow) {
+            val step = max(1, h / 160)
+            var r = minStartRow
+            while (r <= maxStartRow) {
+                var upperFg = 0f
+                for (y in r until (r + upperRows)) {
+                    upperFg += activeRowOccupancy[y]
+                }
+                val upperOcc = upperFg / upperRows
+
+                var lowerFg = 0f
+                for (y in (r + upperRows) until (r + totalWindowRows)) {
+                    lowerFg += activeRowOccupancy[y]
+                }
+                val lowerOcc = lowerFg / lowerRows
+
+                // Target ~0.26 occlusion behind lower numerals while heavily penalizing covered upper numerals
+                val upperPenalty = if (upperOcc <= 0.14f) upperOcc * 0.8f else 0.112f + (upperOcc - 0.14f) * 3.8f
+                val targetLower = 0.28f
+                val lowerFit = 1f - abs(lowerOcc - targetLower) * 2.2f
+                val occlusionBonus = if (lowerOcc >= 0.06f && lowerOcc <= 0.65f) 0.45f else -0.40f
+                val score = lowerFit + occlusionBonus - upperPenalty
+
+                if (score > bestWindowScore) {
+                    bestWindowScore = score
+                    bestTopFrac = (r.toFloat() / h.toFloat()).coerceIn(0.07f, 0.27f)
+                    bestLowerOcc = lowerOcc
+                }
+                r += step
+            }
         }
 
         // Score edge sharpness & separation confidence 0..100
@@ -841,14 +971,15 @@ class DepthDetectionEngine {
         val quality = ((separationGap * 82f) + headroomBonus).roundToInt().coerceIn(20, 99)
 
         return DepthGeometryEval(
-            isEligible = isWellSeparated && quality >= 40,
+            isEligible = isWellSeparated && quality >= 42,
             category = category,
             qualityScore = quality,
             peakYFraction = peakYFrac,
             peakXFraction = peakXFrac,
             coverageFraction = coverage,
-            recommendedClockTopFraction = recommendedTop,
-            recommendedAlign = recommendedAlign
+            recommendedClockTopFraction = bestTopFrac,
+            recommendedAlign = recommendedAlign,
+            clockOcclusionFraction = bestLowerOcc.coerceIn(0f, 1f)
         )
     }
 
@@ -893,15 +1024,18 @@ class DepthDetectionEngine {
     }
 
     /**
-     * Full-resolution Luminance-Guided Joint Alpha Upsampler.
+     * Full-resolution CIE L*a*b* Joint Color-Guided Alpha Upsampler.
      * - Copies pure interior foreground pixels directly (zero compute, bit-exact RGB).
      * - Skips pure exterior sky pixels immediately.
-     * - Snaps the thin contour ribbon using spatial bilinear weights modulated by luminance affinity.
+     * - Snaps the contour ribbon using spatial bilinear weights modulated by perceptual L*a*b* deltaE affinity,
+     *   eliminating edge halos even at iso-luminant color boundaries (e.g. sunset orange vs slate blue).
      */
-    private fun upsampleCutoutLuminanceGuided(
+    private fun upsampleCutoutLabGuided(
         fullBitmap: Bitmap,
         coarseAlpha: FloatArray,
-        coarseLum: FloatArray,
+        coarseL: FloatArray,
+        coarseA: FloatArray,
+        coarseB: FloatArray,
         cw: Int,
         ch: Int
     ): Bitmap {
@@ -914,9 +1048,9 @@ class DepthDetectionEngine {
         val outPixels = IntArray(fullCount)
         val scaleX = cw.toFloat() / fw.toFloat()
         val scaleY = ch.toFloat() / fh.toFloat()
-        val invSigmaSq = 1f / (14f * 14f)
+        val invSigmaLabSq = 1f / (11f * 11f)
+        val labBuf = FloatArray(3)
 
-        // Precompute X mappings to keep inner loop tight and branch-predictable
         val mapX0 = IntArray(fw)
         val mapX1 = IntArray(fw)
         val mapFx = FloatArray(fw)
@@ -953,32 +1087,36 @@ class DepthDetectionEngine {
                 val a11 = coarseAlpha[i11]
 
                 val fIdx = fRow + x
-                // Fast path 1: completely opaque interior foreground
                 if (a00 >= 0.99f && a10 >= 0.99f && a01 >= 0.99f && a11 >= 0.99f) {
                     outPixels[fIdx] = srcPixels[fIdx]
                     continue
                 }
-                // Fast path 2: completely transparent sky/background
                 if (a00 <= 0.01f && a10 <= 0.01f && a01 <= 0.01f && a11 <= 0.01f) {
                     outPixels[fIdx] = 0
                     continue
                 }
 
-                // Boundary ribbon: joint luminance-guided interpolation snaps cleanly to full-res edges
                 val srcArgb = srcPixels[fIdx]
-                val lum = LabColorSpace.pixelLuminance(srcArgb)
+                LabColorSpace.argbToLab(srcArgb, labBuf)
+                val fL = labBuf[0]
+                val fA = labBuf[1]
+                val fB = labBuf[2]
+
                 val fx = mapFx[x]
                 val oneMinusFx = 1f - fx
 
-                val dl00 = lum - coarseLum[i00]
-                val dl10 = lum - coarseLum[i10]
-                val dl01 = lum - coarseLum[i01]
-                val dl11 = lum - coarseLum[i11]
+                fun labWeight(idx: Int, spatialWeight: Float): Float {
+                    val dl = fL - coarseL[idx]
+                    val da = fA - coarseA[idx]
+                    val db = fB - coarseB[idx]
+                    val de2 = dl * dl + 0.72f * (da * da + db * db)
+                    return spatialWeight / (1f + de2 * invSigmaLabSq)
+                }
 
-                val w00 = (oneMinusFx * oneMinusFy) / (1f + dl00 * dl00 * invSigmaSq)
-                val w10 = (fx * oneMinusFy) / (1f + dl10 * dl10 * invSigmaSq)
-                val w01 = (oneMinusFx * fy) / (1f + dl01 * dl01 * invSigmaSq)
-                val w11 = (fx * fy) / (1f + dl11 * dl11 * invSigmaSq)
+                val w00 = labWeight(i00, oneMinusFx * oneMinusFy)
+                val w10 = labWeight(i10, fx * oneMinusFy)
+                val w01 = labWeight(i01, oneMinusFx * fy)
+                val w11 = labWeight(i11, fx * fy)
 
                 val wSum = w00 + w10 + w01 + w11
                 val rawAlpha = if (wSum > 1e-6f) {
@@ -987,7 +1125,6 @@ class DepthDetectionEngine {
                     0f
                 }
 
-                // Gentle S-curve smoothing for crisp anti-aliased 1.5px edge
                 val t = ((rawAlpha - 0.16f) / 0.68f).coerceIn(0f, 1f)
                 val smoothAlpha = t * t * (3f - 2f * t)
                 val alphaByte = (smoothAlpha * 255f).roundToInt().coerceIn(0, 255)
@@ -999,7 +1136,7 @@ class DepthDetectionEngine {
             }
         }
 
-        val cutout = Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
+        val cutout = createBitmap(fw, fh)
         cutout.setPixels(outPixels, 0, fw, 0, 0, fw, fh)
         return cutout
     }
@@ -1080,6 +1217,6 @@ class DepthDetectionEngine {
         private const val ANALYSIS_WIDTH = 360
         private const val SMOOTH_SKY_DEADZONE = 1.85f
         private const val MIN_BARRIER_LAB = 6.5f
-        private const val MIN_SEPARATION_CONTRAST = 0.14f
+        private const val MIN_SEPARATION_CONTRAST = 0.20f
     }
 }

@@ -55,7 +55,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.data.media.BackdropImageLoader
+import com.example.data.model.UiStyleMode
 import com.example.data.model.Wallpaper
+import com.example.ui.theme.LocalUiStyleMode
 
 @Composable
 fun ShimmerBox(modifier: Modifier = Modifier) {
@@ -84,6 +86,15 @@ fun WallpaperAsyncImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop
 ) {
+    if (wallpaper.isBundledAsset) {
+        Image(
+            painter = painterResource(id = wallpaper.fallbackResId),
+            contentDescription = contentDescription,
+            contentScale = contentScale,
+            modifier = modifier
+        )
+        return
+    }
     val context = LocalContext.current
     val url = if (useFullRes) wallpaper.fullResUrl else wallpaper.thumbnailUrl
     SubcomposeAsyncImage(
@@ -164,9 +175,12 @@ fun WallpaperGridCard(
     aspectRatio: Float = 0.66f,
     cornerRadius: Dp = 24.dp
 ) {
+    val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
     Surface(
         shape = RoundedCornerShape(cornerRadius),
-        tonalElevation = 2.dp,
+        border = glassSpecularBorder(),
+        tonalElevation = if (isGlass) 0.dp else 2.dp,
+        shadowElevation = if (isGlass) 6.dp else 0.dp,
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
