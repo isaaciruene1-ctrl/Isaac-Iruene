@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.io.File
 import java.time.Duration
 
 plugins {
@@ -34,7 +35,9 @@ android {
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      val repoKeystore = File(rootDir, "debug.keystore")
+      val homeKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+      storeFile = if (repoKeystore.exists()) repoKeystore else homeKeystore
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
