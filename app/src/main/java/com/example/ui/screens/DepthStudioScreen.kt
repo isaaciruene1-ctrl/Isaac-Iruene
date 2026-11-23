@@ -194,8 +194,130 @@ private enum class CustomColorTarget(val label: String) {
     SECONDARY("Accent")
 }
 
+private fun android.content.Context.findComponentActivity(): androidx.activity.ComponentActivity? {
+    var ctx = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is androidx.activity.ComponentActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 @Composable
 fun DepthStudioScreen(
+    initialWallpaper: Wallpaper,
+    depthState: DepthStudioUiState,
+    clockConfig: ClockDesignConfig,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    isApplying: Boolean,
+    initialSet: LockScreenSetDoc? = null,
+    onLoadWallpaper: (Wallpaper, Boolean) -> Unit,
+    onPickCustomPhoto: (Uri, Boolean) -> Unit,
+    onBeginClockGesture: (ClockDesignConfig) -> Unit,
+    onPreviewClockConfig: (ClockDesignConfig) -> Unit,
+    onEndClockGesture: () -> Unit,
+    onCommitClockConfig: ((ClockDesignConfig) -> ClockDesignConfig) -> Unit,
+    onUndoClock: () -> Unit,
+    onRedoClock: () -> Unit,
+    onResetProportions: () -> Unit,
+    onCenterClock: () -> Unit,
+    onAutoSnapClock: () -> Unit = {},
+    onRestoreSetClock: ((ClockDesignConfig) -> Unit)? = null,
+    onSaveLockScreenSet: ((LockScreenSetDoc) -> Unit)? = null,
+    onBack: () -> Unit,
+    onApplyWallpaper: (Wallpaper, WallpaperTarget, Boolean) -> Unit,
+    onApplyCustomBitmapWallpaper: (Bitmap, WallpaperTarget, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    // Backdrop 1.1 optional ViewModel-synced bindings (atomic Undo/Redo, Depth V2, Canvas, Weather)
+    canvasFraming: CanvasFramingState? = null,
+    onBeginStudioGesture: (() -> Unit)? = null,
+    onEndStudioGesture: (() -> Unit)? = null,
+    onPreviewCanvasFraming: ((CanvasFramingState) -> Unit)? = null,
+    onCommitCanvasFraming: (((CanvasFramingState) -> CanvasFramingState) -> Unit)? = null,
+    onResetCanvasFraming: (() -> Unit)? = null,
+    maskStrokes: List<MaskBrushStroke> = emptyList(),
+    maskFeather: Float = 0.45f,
+    refinedCutoutBitmap: Bitmap? = null,
+    onAddMaskStroke: ((MaskBrushStroke) -> Unit)? = null,
+    onClearMaskStrokes: (() -> Unit)? = null,
+    onSetMaskFeather: ((Float, Boolean) -> Unit)? = null,
+    widgetTelemetry: ClockWidgetTelemetry = ClockWidgetTelemetry(),
+    weatherCity: String = "",
+    onWeatherCityChange: ((String) -> Unit)? = null,
+    onRefreshWeather: ((String, Boolean) -> Unit)? = null,
+    onRestoreSet: ((LockScreenSetDoc) -> Unit)? = null,
+    onAutoSnapWithViewport: ((Float, Float) -> Unit)? = null
+) {
+    val context = LocalContext.current
+    val existingOwner = androidx.activity.compose.LocalActivityResultRegistryOwner.current
+    val fallbackOwner = remember(context) {
+        existingOwner ?: context.findComponentActivity() ?: object : androidx.activity.result.ActivityResultRegistryOwner {
+            private val registry = object : androidx.activity.result.ActivityResultRegistry() {
+                override fun <I, O> onLaunch(
+                    requestCode: Int,
+                    contract: androidx.activity.result.contract.ActivityResultContract<I, O>,
+                    input: I,
+                    options: androidx.core.app.ActivityOptionsCompat?
+                ) {}
+            }
+            override val activityResultRegistry: androidx.activity.result.ActivityResultRegistry
+                get() = registry
+        }
+    }
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.activity.compose.LocalActivityResultRegistryOwner provides fallbackOwner
+    ) {
+        DepthStudioContent(
+            initialWallpaper = initialWallpaper,
+            depthState = depthState,
+            clockConfig = clockConfig,
+            canUndo = canUndo,
+            canRedo = canRedo,
+            isApplying = isApplying,
+            initialSet = initialSet,
+            onLoadWallpaper = onLoadWallpaper,
+            onPickCustomPhoto = onPickCustomPhoto,
+            onBeginClockGesture = onBeginClockGesture,
+            onPreviewClockConfig = onPreviewClockConfig,
+            onEndClockGesture = onEndClockGesture,
+            onCommitClockConfig = onCommitClockConfig,
+            onUndoClock = onUndoClock,
+            onRedoClock = onRedoClock,
+            onResetProportions = onResetProportions,
+            onCenterClock = onCenterClock,
+            onAutoSnapClock = onAutoSnapClock,
+            onRestoreSetClock = onRestoreSetClock,
+            onSaveLockScreenSet = onSaveLockScreenSet,
+            onBack = onBack,
+            onApplyWallpaper = onApplyWallpaper,
+            onApplyCustomBitmapWallpaper = onApplyCustomBitmapWallpaper,
+            modifier = modifier,
+            canvasFraming = canvasFraming,
+            onBeginStudioGesture = onBeginStudioGesture,
+            onEndStudioGesture = onEndStudioGesture,
+            onPreviewCanvasFraming = onPreviewCanvasFraming,
+            onCommitCanvasFraming = onCommitCanvasFraming,
+            onResetCanvasFraming = onResetCanvasFraming,
+            maskStrokes = maskStrokes,
+            maskFeather = maskFeather,
+            refinedCutoutBitmap = refinedCutoutBitmap,
+            onAddMaskStroke = onAddMaskStroke,
+            onClearMaskStrokes = onClearMaskStrokes,
+            onSetMaskFeather = onSetMaskFeather,
+            widgetTelemetry = widgetTelemetry,
+            weatherCity = weatherCity,
+            onWeatherCityChange = onWeatherCityChange,
+            onRefreshWeather = onRefreshWeather,
+            onRestoreSet = onRestoreSet,
+            onAutoSnapWithViewport = onAutoSnapWithViewport
+        )
+    }
+}
+
+@Composable
+private fun DepthStudioContent(
     initialWallpaper: Wallpaper,
     depthState: DepthStudioUiState,
     clockConfig: ClockDesignConfig,
@@ -2735,3 +2857,5 @@ private fun StudioWallpaperCatalogPickerDialog(
         }
     }
 }
+
+

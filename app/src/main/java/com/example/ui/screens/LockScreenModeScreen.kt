@@ -81,9 +81,63 @@ import com.example.ui.components.StudioOptionPill
 import com.example.ui.components.TactileSurface
 import com.example.ui.theme.rememberStudioHaptics
 
+private fun android.content.Context.findComponentActivity(): androidx.activity.ComponentActivity? {
+    var ctx = this
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is androidx.activity.ComponentActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LockScreenModeScreen(
+    preferences: UserPreferencesDoc,
+    savedSets: List<LockScreenSetDoc>,
+    currentClockConfig: ClockDesignConfig,
+    onBack: () -> Unit,
+    onOpenCompatibility: () -> Unit,
+    onSelectOverlaySetId: (String) -> Unit,
+    onSetOverlayEnabled: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val existingOwner = androidx.activity.compose.LocalActivityResultRegistryOwner.current
+    val fallbackOwner = remember(context) {
+        existingOwner ?: context.findComponentActivity() ?: object : androidx.activity.result.ActivityResultRegistryOwner {
+            private val registry = object : androidx.activity.result.ActivityResultRegistry() {
+                override fun <I, O> onLaunch(
+                    requestCode: Int,
+                    contract: androidx.activity.result.contract.ActivityResultContract<I, O>,
+                    input: I,
+                    options: androidx.core.app.ActivityOptionsCompat?
+                ) {}
+            }
+            override val activityResultRegistry: androidx.activity.result.ActivityResultRegistry
+                get() = registry
+        }
+    }
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.activity.compose.LocalActivityResultRegistryOwner provides fallbackOwner
+    ) {
+        LockScreenModeContent(
+            preferences = preferences,
+            savedSets = savedSets,
+            currentClockConfig = currentClockConfig,
+            onBack = onBack,
+            onOpenCompatibility = onOpenCompatibility,
+            onSelectOverlaySetId = onSelectOverlaySetId,
+            onSetOverlayEnabled = onSetOverlayEnabled,
+            modifier = modifier
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LockScreenModeContent(
     preferences: UserPreferencesDoc,
     savedSets: List<LockScreenSetDoc>,
     currentClockConfig: ClockDesignConfig,
