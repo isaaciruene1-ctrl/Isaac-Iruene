@@ -42,6 +42,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -99,6 +100,32 @@ fun WallpaperAsyncImage(
         )
         return
     }
+    if (com.example.data.catalog.ProceduralWallpaperRenderer.isProceduralUrl(wallpaper.thumbnailUrl)) {
+        val w = if (useFullRes) 1080 else 540
+        val h = if (useFullRes) 1920 else 960
+        val bmpState = androidx.compose.runtime.produceState<android.graphics.Bitmap?>(
+            initialValue = null,
+            key1 = wallpaper.id,
+            key2 = useFullRes
+        ) {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                com.example.data.catalog.ProceduralWallpaperRenderer.getOrRenderPreview(wallpaper, w, h)
+            }
+        }
+        val bmp = bmpState.value
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = contentDescription,
+                contentScale = contentScale,
+                colorFilter = colorFilter,
+                modifier = modifier
+            )
+        } else {
+            ShimmerBox(modifier = modifier)
+        }
+        return
+    }
     val context = LocalContext.current
     val url = if (useFullRes) wallpaper.fullResUrl else wallpaper.thumbnailUrl
     SubcomposeAsyncImage(
@@ -120,13 +147,26 @@ fun WallpaperAsyncImage(
             ShimmerBox(modifier = Modifier.fillMaxSize())
         },
         error = {
-            Image(
-                painter = painterResource(id = wallpaper.fallbackResId),
-                contentDescription = contentDescription,
-                contentScale = contentScale,
-                colorFilter = colorFilter,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (wallpaper.id.startsWith("exp_")) {
+                val fallbackBmp = androidx.compose.runtime.remember(wallpaper.id) {
+                    com.example.data.catalog.ProceduralWallpaperRenderer.getOrRenderPreview(wallpaper, 540, 960)
+                }
+                Image(
+                    bitmap = fallbackBmp.asImageBitmap(),
+                    contentDescription = contentDescription,
+                    contentScale = contentScale,
+                    colorFilter = colorFilter,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = wallpaper.fallbackResId),
+                    contentDescription = contentDescription,
+                    contentScale = contentScale,
+                    colorFilter = colorFilter,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     )
 }

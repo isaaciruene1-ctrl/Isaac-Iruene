@@ -37,6 +37,8 @@ internal fun buildThemedPartCatalog(
             WallpaperCategory.FUTURISTIC -> Triple("fut", "Prism", listOf("futuristic", "kinetic", "synth"))
             WallpaperCategory.CINEMATIC -> Triple("cin", "Frame", listOf("cinematic", "film", "moody"))
             WallpaperCategory.DEPTH_STUDIO -> Triple("dep", "Relief", listOf("depth", "portrait", "layered"))
+            WallpaperCategory.STOCK -> Triple("stk", "System", listOf("stock", "minimal", "geometric"))
+            WallpaperCategory.SUPERHERO -> Triple("sup", "Crest", listOf("superhero", "emblem", "cosmic"))
         }
 
         val specs = themes.mapIndexed { idx, theme ->

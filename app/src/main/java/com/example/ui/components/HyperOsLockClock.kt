@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,20 +40,31 @@ import com.example.data.model.UiStyleMode
 import com.example.engine.depth.ClockHorizontalAlign
 import com.example.ui.screens.CanvasLookFilter
 import com.example.ui.theme.AppMotion
+import com.example.ui.theme.ArchivoBlackFontFamily
+import com.example.ui.theme.BebasNeueFontFamily
 import com.example.ui.theme.BigShouldersFontFamily
+import com.example.ui.theme.BodoniModaFontFamily
+import com.example.ui.theme.CaveatFontFamily
+import com.example.ui.theme.CinzelFontFamily
 import com.example.ui.theme.CormorantFontFamily
 import com.example.ui.theme.FredokaFontFamily
+import com.example.ui.theme.InstrumentSerifFontFamily
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalReducedMotionFlag
+import com.example.ui.theme.LocalThemeCustomization
 import com.example.ui.theme.LocalUiStyleMode
+import com.example.ui.theme.MajorMonoFontFamily
 import com.example.ui.theme.OrbitronFontFamily
 import com.example.ui.theme.OswaldFontFamily
 import com.example.ui.theme.OutfitFontFamily
 import com.example.ui.theme.PlayfairFontFamily
 import com.example.ui.theme.PlusJakartaSansFontFamily
+import com.example.ui.theme.RighteousFontFamily
 import com.example.ui.theme.ShantellSansFontFamily
+import com.example.ui.theme.SilkscreenFontFamily
 import com.example.ui.theme.SpaceGroteskFontFamily
 import com.example.ui.theme.SyneFontFamily
+import com.example.ui.theme.SyneMonoFontFamily
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -96,8 +108,12 @@ enum class HyperOsClockFace(
 ) {
     // MAGAZINE & SHOWCASE EDITORIAL
     POSTER_SPLIT("Poster Bold", "Tall editorial display numerals", HyperOsClockFont.BIG_SHOULDERS, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.WIDE_HORIZONTAL),
+    TALL_POSTER_1340("Tall 1340", "Ultra-condensed full-bleed canyon numerals", HyperOsClockFont.BEBAS_NEUE, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.BALANCED),
     CANYON_MONUMENT("Canyon Stack", "Oversized rounded canyon depth stack", HyperOsClockFont.OUTFIT, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.TALL_VERTICAL),
     LUXE_VOGUE("Luxe Vogue", "Tight condensed high-fashion serif", HyperOsClockFont.CORMORANT, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.BALANCED),
+    ROMAN_MONUMENT("Monument", "Sculpted classical serif with stone rule", HyperOsClockFont.CINZEL, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.WIDE_HORIZONTAL),
+    EDITORIAL_DUO("Editorial Duo", "High-fashion stacked serif with accent bar", HyperOsClockFont.BODONI_MODA, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.TALL_VERTICAL),
+    NEON_OVERLAP("Glass Overlap", "Layered translucent depth digits with slice", HyperOsClockFont.ARCHIVO_BLACK, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.TALL_VERTICAL),
     SPIRE_MONOLITH("Spire Tower", "Ultra-tall architectural horizon digits", HyperOsClockFont.BIG_SHOULDERS, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.BALANCED),
     AQUA_MIST_TALL("Aqua Glass", "Slender elongated stacked numerals", HyperOsClockFont.SPACE_GROTESK, HyperOsClockFamily.MAGAZINE, ClockAspectProfile.TALL_VERTICAL),
     HORIZON_SILK("Horizon Silk", "Broad luminous curved glass readout", HyperOsClockFont.FREDOKA, HyperOsClockFamily.CLASSIC, ClockAspectProfile.WIDE_HORIZONTAL),
@@ -112,11 +128,17 @@ enum class HyperOsClockFace(
     SWISS_GRID_SPLIT("Swiss Grid", "Hairline grid split with footer rule", HyperOsClockFont.JAKARTA, HyperOsClockFamily.CLASSIC, ClockAspectProfile.WIDE_HORIZONTAL),
     CHRONO_TELEMETRY("Chrono Bar", "Tabular time & live 60s progress bar", HyperOsClockFont.JETBRAINS_MONO, HyperOsClockFamily.CLASSIC, ClockAspectProfile.WIDE_HORIZONTAL),
     KINETIC_MONO("Precision Mono", "Tabular numerals & live seconds", HyperOsClockFont.JETBRAINS_MONO, HyperOsClockFamily.CLASSIC, ClockAspectProfile.WIDE_HORIZONTAL),
+    RETRO_PIXEL_MATRIX("Matrix LED", "Crisp 8-bit LED numerals & telemetry dot", HyperOsClockFont.SILKSCREEN, HyperOsClockFamily.CLASSIC, ClockAspectProfile.WIDE_HORIZONTAL),
+    SOLAR_ARC_GAUGE("Solar Horizon", "Curved zenith daylight arc over serif time", HyperOsClockFont.INSTRUMENT_SERIF, HyperOsClockFamily.CLASSIC, ClockAspectProfile.WIDE_HORIZONTAL),
     ANALOG_MINIMAL("Chronograph", "Sweeping hands & minimalist dial", HyperOsClockFont.SPACE_GROTESK, HyperOsClockFamily.CLASSIC, ClockAspectProfile.BALANCED),
     ORBITAL_RING_HYBRID("Orbital Hybrid", "Analog dial ticks orbiting digital core", HyperOsClockFont.ORBITRON, HyperOsClockFamily.CLASSIC, ClockAspectProfile.BALANCED),
+    COMPASS_CHRONO("Compass Dial", "Precision azimuth dial orbiting mono core", HyperOsClockFont.SYNE_MONO, HyperOsClockFamily.CLASSIC, ClockAspectProfile.BALANCED),
 
     // RHOMBUS & MODULAR CAPSULES
     GLASS_PILL_TRIO("Capsule Trio", "Modular frosted hour, min & status pills", HyperOsClockFont.SYNE, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.WIDE_HORIZONTAL),
+    BRUTALIST_SLAB("Slab Split", "Heavy asymmetric slab blocks & battery pill", HyperOsClockFont.ARCHIVO_BLACK, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.WIDE_HORIZONTAL),
+    KINETIC_STEP("Step Cascade", "Staggered diagonal hour/minute geometry", HyperOsClockFont.RIGHTEOUS, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.TALL_VERTICAL),
+    HANDWRITTEN_STAMP("Studio Script", "Expressive brush numerals & date stamp", HyperOsClockFont.CAVEAT, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.BALANCED),
     RHOMBUS_PRISM("Prism Frame", "Faceted geometric rhombus frame", HyperOsClockFont.ORBITRON, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.BALANCED),
     RHOMBUS_DUAL_ROW("Split Prism", "Dual-tone hours with diamond divider", HyperOsClockFont.SYNE, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.BALANCED),
     PIXEL_DUAL_DIAL("Orbit Dial", "Stacked accent numerals & sec arc", HyperOsClockFont.SPACE_GROTESK, HyperOsClockFamily.RHOMBUS, ClockAspectProfile.BALANCED),
@@ -131,17 +153,27 @@ enum class HyperOsClockFont(
     val category: ClockTypefaceCategory
 ) {
     BIG_SHOULDERS("Poster Bold", BigShouldersFontFamily, R.font.big_shoulders_display, ClockTypefaceCategory.SANS),
+    BEBAS_NEUE("Bebas", BebasNeueFontFamily, R.font.bebas_neue, ClockTypefaceCategory.SANS),
+    ARCHIVO_BLACK("Archivo", ArchivoBlackFontFamily, R.font.archivo_black, ClockTypefaceCategory.SANS),
     OUTFIT("Outfit", OutfitFontFamily, R.font.outfit, ClockTypefaceCategory.SANS),
     JAKARTA("Jakarta", PlusJakartaSansFontFamily, R.font.plus_jakarta_sans, ClockTypefaceCategory.SANS),
     OSWALD("Oswald", OswaldFontFamily, R.font.oswald, ClockTypefaceCategory.SANS),
     SYNE("Syne", SyneFontFamily, R.font.syne, ClockTypefaceCategory.SANS),
     PLAYFAIR("Playfair", PlayfairFontFamily, R.font.playfair_display, ClockTypefaceCategory.SERIF),
     CORMORANT("Cormorant", CormorantFontFamily, R.font.cormorant_garamond, ClockTypefaceCategory.SERIF),
+    CINZEL("Cinzel", CinzelFontFamily, R.font.cinzel, ClockTypefaceCategory.SERIF),
+    INSTRUMENT_SERIF("Instrument", InstrumentSerifFontFamily, R.font.instrument_serif, ClockTypefaceCategory.SERIF),
+    BODONI_MODA("Bodoni", BodoniModaFontFamily, R.font.bodoni_moda, ClockTypefaceCategory.SERIF),
     FREDOKA("Rounded", FredokaFontFamily, R.font.fredoka, ClockTypefaceCategory.ROUNDED),
+    RIGHTEOUS("Righteous", RighteousFontFamily, R.font.righteous, ClockTypefaceCategory.ROUNDED),
     JETBRAINS_MONO("Mono", JetBrainsMonoFontFamily, R.font.jetbrains_mono, ClockTypefaceCategory.MONO),
     SPACE_GROTESK("Space", SpaceGroteskFontFamily, R.font.space_grotesk, ClockTypefaceCategory.MONO),
     ORBITRON("Orbitron", OrbitronFontFamily, R.font.orbitron, ClockTypefaceCategory.MONO),
-    SHANTELL_SANS("Script", ShantellSansFontFamily, R.font.shantell_sans, ClockTypefaceCategory.SCRIPT)
+    SYNE_MONO("Syne Mono", SyneMonoFontFamily, R.font.syne_mono, ClockTypefaceCategory.MONO),
+    SILKSCREEN("Pixel LED", SilkscreenFontFamily, R.font.silkscreen, ClockTypefaceCategory.MONO),
+    MAJOR_MONO("Major", MajorMonoFontFamily, R.font.major_mono_display, ClockTypefaceCategory.MONO),
+    SHANTELL_SANS("Script", ShantellSansFontFamily, R.font.shantell_sans, ClockTypefaceCategory.SCRIPT),
+    CAVEAT("Caveat", CaveatFontFamily, R.font.caveat, ClockTypefaceCategory.SCRIPT)
 }
 
 enum class HyperOsClockFinish(val label: String) {
@@ -152,6 +184,12 @@ enum class HyperOsClockFinish(val label: String) {
     STRIPED("Striped"),
     BLUR_GLASS("Liquid Glass")
 }
+
+data class ClockWidgetTelemetry(
+    val weatherText: String = "21° CLEAR",
+    val batteryPercent: Int = 86,
+    val isWeatherAvailable: Boolean = true
+)
 
 data class ClockDesignConfig(
     val face: HyperOsClockFace = HyperOsClockFace.POSTER_SPLIT,
@@ -171,6 +209,11 @@ data class ClockDesignConfig(
     val useLiveTime: Boolean = false,
     val is24HourFormat: Boolean = true,
     val showDateAndWeather: Boolean = true,
+    val widgetsEnabled: Boolean = true,
+    val showDateWidget: Boolean = true,
+    val showWeatherWidget: Boolean = true,
+    val showBatteryWidget: Boolean = false,
+    val showDecorativeWidget: Boolean = true,
     val signatureMode: ClockSignatureMode = ClockSignatureMode.DATE_WEATHER,
     val signatureText: String = "",
     val aspectAdaptiveEnabled: Boolean = true,
@@ -199,6 +242,11 @@ data class ClockDesignConfig(
         put("useLiveTime", useLiveTime)
         put("is24HourFormat", is24HourFormat)
         put("showDateAndWeather", showDateAndWeather)
+        put("widgetsEnabled", widgetsEnabled)
+        put("showDateWidget", showDateWidget)
+        put("showWeatherWidget", showWeatherWidget)
+        put("showBatteryWidget", showBatteryWidget)
+        put("showDecorativeWidget", showDecorativeWidget)
         put("signatureMode", signatureMode.name)
         put("signatureText", signatureText)
         put("aspectAdaptiveEnabled", aspectAdaptiveEnabled)
@@ -243,6 +291,11 @@ data class ClockDesignConfig(
                     useLiveTime = obj.optBoolean("useLiveTime", false),
                     is24HourFormat = obj.optBoolean("is24HourFormat", true),
                     showDateAndWeather = showDate,
+                    widgetsEnabled = obj.optBoolean("widgetsEnabled", true),
+                    showDateWidget = obj.optBoolean("showDateWidget", showDate),
+                    showWeatherWidget = obj.optBoolean("showWeatherWidget", showDate),
+                    showBatteryWidget = obj.optBoolean("showBatteryWidget", false),
+                    showDecorativeWidget = obj.optBoolean("showDecorativeWidget", true),
                     signatureMode = sigMode,
                     signatureText = obj.optString("signatureText", "").take(36),
                     aspectAdaptiveEnabled = obj.optBoolean("aspectAdaptiveEnabled", true),
@@ -307,6 +360,12 @@ fun HyperOsLockClock(
     useLiveTime: Boolean = false,
     is24HourFormat: Boolean = true,
     showDateAndWeather: Boolean = true,
+    widgetsEnabled: Boolean = true,
+    showDateWidget: Boolean = true,
+    showWeatherWidget: Boolean = true,
+    showBatteryWidget: Boolean = false,
+    showDecorativeWidget: Boolean = true,
+    telemetry: ClockWidgetTelemetry = ClockWidgetTelemetry(),
     signatureMode: ClockSignatureMode = ClockSignatureMode.DATE_WEATHER,
     signatureText: String = "",
     liquidGlassConfig: LiquidGlassConfig = LiquidGlassConfig(),
@@ -377,13 +436,14 @@ fun HyperOsLockClock(
 
     val uiStyle = LocalUiStyleMode.current
     val reducedMotion = LocalReducedMotionFlag.current
+    val customTokens = LocalThemeCustomization.current
     val scale = scaleFactor.coerceIn(ClockSpatialMath.MIN_SCALE, ClockSpatialMath.MAX_SCALE)
     val safeWidth = widthScale.coerceIn(ClockSpatialMath.MIN_WIDTH_SCALE, ClockSpatialMath.MAX_WIDTH_SCALE)
     val safeHeight = heightScale.coerceIn(ClockSpatialMath.MIN_HEIGHT_SCALE, ClockSpatialMath.MAX_HEIGHT_SCALE)
     val safeOpacity = opacity.coerceIn(0.20f, 1.0f)
     val animatedOpacity by animateFloatAsState(
         targetValue = safeOpacity,
-        animationSpec = AppMotion.floatEffectsSpec(uiStyle, reducedMotion),
+        animationSpec = AppMotion.floatEffectsSpec(uiStyle, reducedMotion, customTokens.m3MotionSpeed),
         label = "clock_opacity_anim"
     )
     val safeWeight = FontWeight(weightLevel.coerceIn(100, 900))
@@ -395,7 +455,7 @@ fun HyperOsLockClock(
             morphPulse.snapTo(if (finish == HyperOsClockFinish.BLUR_GLASS || uiStyle == UiStyleMode.FROSTED_GLASS_OS) 0.90f else 0.95f)
             morphPulse.animateTo(
                 targetValue = 1f,
-                animationSpec = AppMotion.glassMorphSpring(uiStyle, reducedMotion = false)
+                animationSpec = AppMotion.glassMorphSpring(uiStyle, reducedMotion = false, speedMultiplier = customTokens.m3MotionSpeed)
             )
         } else {
             morphPulse.snapTo(1f)
@@ -429,6 +489,12 @@ fun HyperOsLockClock(
                 widthScale = safeWidth,
                 opacity = if (maskMode) 1f else animatedOpacity,
                 showDateAndWeather = showDateAndWeather,
+                widgetsEnabled = widgetsEnabled,
+                showDateWidget = showDateWidget,
+                showWeatherWidget = showWeatherWidget,
+                showBatteryWidget = showBatteryWidget,
+                showDecorativeWidget = showDecorativeWidget,
+                telemetry = telemetry,
                 signatureMode = signatureMode,
                 signatureText = signatureText,
                 colAlignment = colAlignment,
@@ -461,6 +527,12 @@ fun HyperOsLockClock(
                 alignment,
                 is24HourFormat,
                 showDateAndWeather,
+                widgetsEnabled,
+                showDateWidget,
+                showWeatherWidget,
+                showBatteryWidget,
+                showDecorativeWidget,
+                telemetry,
                 signatureMode,
                 signatureText,
                 parts.hours,
@@ -476,6 +548,13 @@ fun HyperOsLockClock(
                     alignment,
                     is24HourFormat,
                     showDateAndWeather,
+                    widgetsEnabled,
+                    showDateWidget,
+                    showWeatherWidget,
+                    showBatteryWidget,
+                    showDecorativeWidget,
+                    telemetry.weatherText,
+                    telemetry.batteryPercent,
                     signatureMode,
                     signatureText,
                     parts.hours,
@@ -483,29 +562,32 @@ fun HyperOsLockClock(
                     parts.seconds
                 )
             }
-            LiquidGlassClockLayer(
-                liquidGlassConfig = liquidGlassConfig,
-                backdropBitmap = backdropBitmap,
-                viewportSize = viewportSize,
-                clockBoxRect = clockBoxRect,
-                zoomScale = zoomScale,
-                panOffset = panOffset,
-                dimFraction = dimFraction,
-                lookFilter = lookFilter,
-                fallbackPrimary = primaryColor,
-                fallbackSecondary = secondaryColor,
-                scaleXAspect = safeWidth,
-                scaleYAspect = safeHeight,
-                opacity = animatedOpacity,
-                captureKey = captureKey
-            ) {
-                ClockFaceColumn(
-                    renderFace = face,
-                    renderFinish = HyperOsClockFinish.SOLID,
-                    facePrimary = Color.White,
-                    faceSecondary = Color.White.copy(alpha = 0.96f),
-                    maskMode = true
-                )
+            // Keyed per face so switching faces inside Liquid Glass never retains previous face bounds or stretches offscreen masks
+            key(face) {
+                LiquidGlassClockLayer(
+                    liquidGlassConfig = liquidGlassConfig,
+                    backdropBitmap = backdropBitmap,
+                    viewportSize = viewportSize,
+                    clockBoxRect = clockBoxRect,
+                    zoomScale = zoomScale,
+                    panOffset = panOffset,
+                    dimFraction = dimFraction,
+                    lookFilter = lookFilter,
+                    fallbackPrimary = primaryColor,
+                    fallbackSecondary = secondaryColor,
+                    scaleXAspect = safeWidth,
+                    scaleYAspect = safeHeight,
+                    opacity = animatedOpacity,
+                    captureKey = captureKey
+                ) {
+                    ClockFaceColumn(
+                        renderFace = face,
+                        renderFinish = HyperOsClockFinish.SOLID,
+                        facePrimary = Color.White,
+                        faceSecondary = Color.White.copy(alpha = 0.96f),
+                        maskMode = true
+                    )
+                }
             }
         } else {
             AnimatedContent(

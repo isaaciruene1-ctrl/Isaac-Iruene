@@ -1,3 +1,17 @@
 <resources>
     <string name="app_name">Backdrops</string>
+    <string name="widget_small_label">Backdrops Quick Dock (3x1)</string>
+    <string name="widget_card_label">Backdrops Showcase (3x2)</string>
+    <string name="widget_studio_desc">Open Backdrops Depth Studio</string>
+    <string name="widget_apply">Apply</string>
+    <string name="widget_favorite">Favorite</string>
+    <string name="widget_favorited">Favorited</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_explore">Explore</string>
+    <string name="nav_favorites">Favorites</string>
+    <string name="nav_collections">Collections</string>
+    <string name="nav_profile">Profile</string>
+    <string name="settings_title">Studio Settings</string>
+    <string name="lock_screen_mode_title">Lock Screen Mode</string>
+    <string name="onboarding_welcome">Welcome to Backdrops</string>
 </resources>

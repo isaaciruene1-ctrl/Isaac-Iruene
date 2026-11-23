@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Backdrops</string>
+    <string name="widget_small_label">Barra Rápida Backdrops (3x1)</string>
+    <string name="widget_card_label">Vitrine Backdrops (3x2)</string>
+    <string name="widget_studio_desc">Abrir Backdrops Depth Studio</string>
+    <string name="widget_apply">Aplicar</string>
+    <string name="widget_favorite">Favorito</string>
+    <string name="widget_favorited">Favoritado</string>
+    <string name="nav_home">Início</string>
+    <string name="nav_explore">Explorar</string>
+    <string name="nav_favorites">Favoritos</string>
+    <string name="nav_collections">Coleções</string>
+    <string name="nav_profile">Perfil</string>
+    <string name="settings_title">Ajustes do Estúdio</string>
+    <string name="lock_screen_mode_title">Modo Tela de Bloqueio</string>
+    <string name="onboarding_welcome">Bem-vindo ao Backdrops</string>
+</resources>

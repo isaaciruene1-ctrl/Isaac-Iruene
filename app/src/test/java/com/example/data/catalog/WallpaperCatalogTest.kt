@@ -31,7 +31,7 @@ class WallpaperCatalogTest {
         assertTrue("Expected zero duplicate raw slugs across parts 1-12, found: $duplicates", duplicates.isEmpty())
 
         val all = WallpaperCatalog.allWallpapers
-        assertTrue("Expected at least 2050 wallpapers, got ${all.size}", all.size >= 2050)
+        assertTrue("Expected at least 2800 wallpapers, got ${all.size}", all.size >= 2800)
         assertEquals("Duplicate IDs detected", all.size, all.map { it.id }.toSet().size)
         assertEquals(
             "Duplicate thumbnail URLs detected",
@@ -41,9 +41,14 @@ class WallpaperCatalogTest {
 
         WallpaperCategory.entries.forEach { category ->
             val count = all.count { it.category == category }
+            val minExpected = when (category) {
+                WallpaperCategory.STOCK -> 210
+                WallpaperCategory.SUPERHERO -> 60
+                else -> 230
+            }
             assertTrue(
-                "Expected at least 185 wallpapers in category $category, got $count",
-                count >= 185
+                "Expected at least $minExpected wallpapers in category $category, got $count",
+                count >= minExpected
             )
         }
 
@@ -84,27 +89,34 @@ class WallpaperCatalogTest {
     @Test
     fun resolutionTiersMatchExact4k2kAndFullHdDimensionsInUrls() {
         WallpaperCatalog.allWallpapers.forEach { wp ->
+            val isProc = ProceduralWallpaperRenderer.isProceduralUrl(wp.fullResUrl)
             when (wp.resolutionTier) {
                 ResolutionTier.UHD_4K -> {
                     val maxDim = maxOf(wp.width, wp.height)
                     val minDim = minOf(wp.width, wp.height)
                     assertTrue("${wp.id} 4K width/height invalid: ${wp.width}x${wp.height}", maxDim >= 3240 && minDim >= 2160)
-                    assertTrue("${wp.id} missing w=${wp.width} in URL", wp.fullResUrl.contains("w=${wp.width}"))
-                    assertTrue("${wp.id} missing h=${wp.height} in URL", wp.fullResUrl.contains("h=${wp.height}"))
+                    if (!isProc) {
+                        assertTrue("${wp.id} missing w=${wp.width} in URL", wp.fullResUrl.contains("w=${wp.width}"))
+                        assertTrue("${wp.id} missing h=${wp.height} in URL", wp.fullResUrl.contains("h=${wp.height}"))
+                    }
                 }
                 ResolutionTier.QHD_1440 -> {
                     val maxDim = maxOf(wp.width, wp.height)
                     val minDim = minOf(wp.width, wp.height)
                     assertTrue("${wp.id} 2K width/height invalid: ${wp.width}x${wp.height}", maxDim >= 2160 && minDim >= 1440)
-                    assertTrue("${wp.id} missing w=${wp.width} in URL", wp.fullResUrl.contains("w=${wp.width}"))
-                    assertTrue("${wp.id} missing h=${wp.height} in URL", wp.fullResUrl.contains("h=${wp.height}"))
+                    if (!isProc) {
+                        assertTrue("${wp.id} missing w=${wp.width} in URL", wp.fullResUrl.contains("w=${wp.width}"))
+                        assertTrue("${wp.id} missing h=${wp.height} in URL", wp.fullResUrl.contains("h=${wp.height}"))
+                    }
                 }
                 ResolutionTier.FHD_1080 -> {
                     val maxDim = maxOf(wp.width, wp.height)
                     val minDim = minOf(wp.width, wp.height)
                     assertTrue("${wp.id} FHD width/height invalid: ${wp.width}x${wp.height}", maxDim >= 1620 && minDim >= 1080)
-                    assertTrue("${wp.id} missing w=${wp.width} in URL", wp.fullResUrl.contains("w=${wp.width}"))
-                    assertTrue("${wp.id} missing h=${wp.height} in URL", wp.fullResUrl.contains("h=${wp.height}"))
+                    if (!isProc) {
+                        assertTrue("${wp.id} missing w=${wp.width} in URL", wp.fullResUrl.contains("w=${wp.width}"))
+                        assertTrue("${wp.id} missing h=${wp.height} in URL", wp.fullResUrl.contains("h=${wp.height}"))
+                    }
                 }
             }
         }

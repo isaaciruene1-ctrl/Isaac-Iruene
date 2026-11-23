@@ -16,6 +16,18 @@ enum class DepthSubjectCategory(val displayName: String) {
     FLAT_CANVAS("Flat Backdrop")
 }
 
+enum class MaskBrushMode {
+    KEEP,
+    ERASE
+}
+
+data class MaskBrushStroke(
+    val normalizedPoints: List<Pair<Float, Float>>,
+    val radiusFraction: Float = 0.045f,
+    val mode: MaskBrushMode = MaskBrushMode.KEEP,
+    val featherFraction: Float = 0.40f
+)
+
 data class DepthDetectionResult(
     val subjectLabel: String,
     val subjectCategory: DepthSubjectCategory,

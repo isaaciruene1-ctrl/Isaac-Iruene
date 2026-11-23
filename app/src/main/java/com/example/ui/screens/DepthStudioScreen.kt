@@ -1,16 +1,23 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +27,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +45,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -47,9 +58,11 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
 import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -59,6 +72,7 @@ import androidx.compose.material.icons.rounded.FormatAlignCenter
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Opacity
 import androidx.compose.material.icons.rounded.OpenWith
 import androidx.compose.material.icons.rounded.Palette
@@ -68,6 +82,7 @@ import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,8 +105,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -100,7 +118,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -114,18 +136,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+import com.example.data.catalog.WallpaperCatalog
 import com.example.data.media.WallpaperTarget
 import com.example.data.model.LockScreenSetDoc
 import com.example.data.model.UiStyleMode
 import com.example.data.model.Wallpaper
+import com.example.data.model.WallpaperCategory
 import com.example.engine.depth.ClockHorizontalAlign
 import com.example.engine.depth.LabColorSpace
+import com.example.engine.depth.MaskBrushMode
+import com.example.engine.depth.MaskBrushStroke
 import com.example.ui.components.ClockBoundingOverlay
 import com.example.ui.components.ClockDesignConfig
 import com.example.ui.components.ClockSignatureMode
 import com.example.ui.components.ClockSpatialMath
+import com.example.ui.components.ClockWidgetTelemetry
 import com.example.ui.components.HyperOsClockFace
 import com.example.ui.components.HyperOsClockFaceThumbnail
 import com.example.ui.components.HyperOsClockFinish
@@ -144,6 +171,7 @@ import com.example.ui.theme.AppMotion
 import com.example.ui.theme.LocalReducedMotionFlag
 import com.example.ui.theme.LocalUiStyleMode
 import com.example.ui.theme.rememberStudioHaptics
+import com.example.ui.viewmodel.CanvasFramingState
 import com.example.ui.viewmodel.DepthStudioUiState
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -157,7 +185,7 @@ private enum class DepthSectionTab(val label: String) {
 
 private enum class ClockSubSection(val label: String) {
     STYLE("Style"),
-    TYPE_FINISH("Type & Surface"),
+    TYPE_FINISH("Design & Materials"),
     COLOR_LAYOUT("Color & Layout")
 }
 
@@ -191,17 +219,45 @@ fun DepthStudioScreen(
     onBack: () -> Unit,
     onApplyWallpaper: (Wallpaper, WallpaperTarget, Boolean) -> Unit,
     onApplyCustomBitmapWallpaper: (Bitmap, WallpaperTarget, Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Backdrop 1.1 optional ViewModel-synced bindings (atomic Undo/Redo, Depth V2, Canvas, Weather)
+    canvasFraming: CanvasFramingState? = null,
+    onBeginStudioGesture: (() -> Unit)? = null,
+    onEndStudioGesture: (() -> Unit)? = null,
+    onPreviewCanvasFraming: ((CanvasFramingState) -> Unit)? = null,
+    onCommitCanvasFraming: (((CanvasFramingState) -> CanvasFramingState) -> Unit)? = null,
+    onResetCanvasFraming: (() -> Unit)? = null,
+    maskStrokes: List<MaskBrushStroke> = emptyList(),
+    maskFeather: Float = 0.45f,
+    refinedCutoutBitmap: Bitmap? = null,
+    onAddMaskStroke: ((MaskBrushStroke) -> Unit)? = null,
+    onClearMaskStrokes: (() -> Unit)? = null,
+    onSetMaskFeather: ((Float, Boolean) -> Unit)? = null,
+    widgetTelemetry: ClockWidgetTelemetry = ClockWidgetTelemetry(),
+    weatherCity: String = "",
+    onWeatherCityChange: ((String) -> Unit)? = null,
+    onRefreshWeather: ((String, Boolean) -> Unit)? = null,
+    onRestoreSet: ((LockScreenSetDoc) -> Unit)? = null,
+    onAutoSnapWithViewport: ((Float, Float) -> Unit)? = null
 ) {
     var activeWallpaper by remember(initialWallpaper.id) { mutableStateOf(initialWallpaper) }
     var customPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
 
     var showControls by remember { mutableStateOf(true) }
     var activeTab by remember { mutableStateOf(DepthSectionTab.SUBJECT) }
     var clockSubSection by remember { mutableStateOf(ClockSubSection.STYLE) }
     var showGlassOpticsDrawer by remember { mutableStateOf(false) }
     var showFormatAndSignatureDrawer by remember { mutableStateOf(false) }
+    var showWidgetsDrawer by remember { mutableStateOf(false) }
+    var showMaskBrushDrawer by remember { mutableStateOf(false) }
+    var showCatalogPickerDialog by remember { mutableStateOf(false) }
+
+    // Manual Mask Brush state
+    var isMaskBrushActive by remember { mutableStateOf(false) }
+    var brushMode by remember { mutableStateOf(MaskBrushMode.KEEP) }
+    var brushRadiusFraction by remember { mutableFloatStateOf(0.055f) }
+    val activeBrushPath = remember { mutableStateListOf<Offset>() }
 
     var showCustomColorPicker by remember { mutableStateOf(false) }
     var colorTarget by remember { mutableStateOf(CustomColorTarget.PRIMARY) }
@@ -213,10 +269,14 @@ fun DepthStudioScreen(
     var clockMeasuredSize by remember { mutableStateOf(IntSize.Zero) }
 
     var clockColorIndex by remember { mutableIntStateOf(0) }
-    var panOffset by remember { mutableStateOf(Offset.Zero) }
-    var zoomScale by remember { mutableFloatStateOf(1.0f) }
-    var dimFraction by remember { mutableFloatStateOf(0.0f) }
-    var lookFilter by remember { mutableStateOf(CanvasLookFilter.ORIGINAL) }
+    var localFraming by remember { mutableStateOf(CanvasFramingState()) }
+    val effectiveFraming = canvasFraming ?: localFraming
+    val zoomScale = effectiveFraming.zoomScale
+    val panOffset = Offset(effectiveFraming.panOffsetX, effectiveFraming.panOffsetY)
+    val rotationDegrees = effectiveFraming.rotationDegrees
+    val dimFraction = effectiveFraming.dimFraction
+    val lookFilter = effectiveFraming.lookFilter
+
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     var showApplyDialog by remember { mutableStateOf(false) }
@@ -224,18 +284,67 @@ fun DepthStudioScreen(
     var lastAutoAppliedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var skipNextAutoSnapForSet by remember { mutableStateOf(initialSet != null) }
 
+    var cityDraft by remember(weatherCity) { mutableStateOf(weatherCity) }
+    val appContext = LocalContext.current
+
+    val coarseLocationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        onRefreshWeather?.invoke("", granted)
+    }
+
+    fun updateFramingPreview(next: CanvasFramingState) {
+        if (onPreviewCanvasFraming != null) {
+            onPreviewCanvasFraming(next)
+        } else {
+            localFraming = next
+        }
+    }
+
+    fun commitFramingChange(transform: (CanvasFramingState) -> CanvasFramingState) {
+        if (onCommitCanvasFraming != null) {
+            onCommitCanvasFraming(transform)
+        } else {
+            localFraming = transform(localFraming)
+        }
+    }
+
+    fun startAtomicGesture() {
+        if (onBeginStudioGesture != null) {
+            onBeginStudioGesture()
+        } else {
+            onBeginClockGesture(clockConfig)
+        }
+    }
+
+    fun endAtomicGesture() {
+        if (onEndStudioGesture != null) {
+            onEndStudioGesture()
+        } else {
+            onEndClockGesture()
+        }
+    }
+
     LaunchedEffect(initialSet?.id) {
         if (initialSet != null) {
             skipNextAutoSnapForSet = true
-            val restoredClock = ClockDesignConfig.fromJsonString(initialSet.clockConfigJson)
-            if (restoredClock != null) {
-                onRestoreSetClock?.invoke(restoredClock)
+            if (onRestoreSet != null) {
+                onRestoreSet(initialSet)
+            } else {
+                val restoredClock = ClockDesignConfig.fromJsonString(initialSet.clockConfigJson)
+                if (restoredClock != null) {
+                    onRestoreSetClock?.invoke(restoredClock)
+                }
+                localFraming = CanvasFramingState(
+                    zoomScale = initialSet.zoomScale.coerceIn(1f, 2.2f),
+                    panOffsetX = initialSet.panOffsetX,
+                    panOffsetY = initialSet.panOffsetY,
+                    rotationDegrees = initialSet.rotationDegrees,
+                    dimFraction = initialSet.dimFraction.coerceIn(0f, 0.50f),
+                    lookFilter = runCatching { CanvasLookFilter.valueOf(initialSet.lookFilterName) }
+                        .getOrDefault(CanvasLookFilter.ORIGINAL)
+                )
             }
-            zoomScale = initialSet.zoomScale.coerceIn(1f, 1.8f)
-            panOffset = Offset(initialSet.panOffsetX, initialSet.panOffsetY)
-            dimFraction = initialSet.dimFraction.coerceIn(0f, 0.45f)
-            lookFilter = runCatching { CanvasLookFilter.valueOf(initialSet.lookFilterName) }
-                .getOrDefault(CanvasLookFilter.ORIGINAL)
             if (initialSet.customPhotoUri.isNotBlank()) {
                 customPhotoUri = runCatching { Uri.parse(initialSet.customPhotoUri) }.getOrNull()
             }
@@ -247,8 +356,7 @@ fun DepthStudioScreen(
     ) { uri ->
         if (uri != null) {
             customPhotoUri = uri
-            panOffset = Offset.Zero
-            zoomScale = 1.0f
+            updateFramingPreview(CanvasFramingState())
             onPickCustomPhoto(uri, false)
         }
     }
@@ -267,7 +375,6 @@ fun DepthStudioScreen(
     val haptics = rememberStudioHaptics()
     val isGlass = uiStyle == UiStyleMode.FROSTED_GLASS_OS
     val density = LocalDensity.current
-    val appContext = LocalContext.current
 
     fun computeSmartWallpaperFraming(result: com.example.engine.depth.DepthDetectionResult): Pair<Float, Offset> {
         val targetZoom = result.recommendedWallpaperZoom.coerceIn(1.0f, 1.80f)
@@ -286,9 +393,15 @@ fun DepthStudioScreen(
         val (targetZoom, targetPan) = computeSmartWallpaperFraming(result)
         val startZoom = zoomScale
         val startPan = panOffset
-        if (reducedMotion) {
-            zoomScale = targetZoom
-            panOffset = targetPan
+        if (reducedMotion || canvasFraming != null) {
+            updateFramingPreview(
+                effectiveFraming.copy(
+                    zoomScale = targetZoom,
+                    panOffsetX = targetPan.x,
+                    panOffsetY = targetPan.y,
+                    rotationDegrees = 0f
+                )
+            )
             return
         }
         coroutineScope.launch {
@@ -298,12 +411,12 @@ fun DepthStudioScreen(
             val offsetSpringSpec = AppMotion.spatialSpring<Offset>(uiStyle, false)
             launch {
                 zAnim.animateTo(targetZoom, animationSpec = springSpec) {
-                    zoomScale = value
+                    updateFramingPreview(effectiveFraming.copy(zoomScale = value))
                 }
             }
             launch {
                 panAnim.animateTo(targetPan, animationSpec = offsetSpringSpec) {
-                    panOffset = value
+                    updateFramingPreview(effectiveFraming.copy(panOffsetX = value.x, panOffsetY = value.y))
                 }
             }
         }
@@ -325,8 +438,14 @@ fun DepthStudioScreen(
                     )
                 )
                 val (targetZoom, targetPan) = computeSmartWallpaperFraming(depthState.result)
-                zoomScale = targetZoom
-                panOffset = targetPan
+                updateFramingPreview(
+                    effectiveFraming.copy(
+                        zoomScale = targetZoom,
+                        panOffsetX = targetPan.x,
+                        panOffsetY = targetPan.y,
+                        rotationDegrees = 0f
+                    )
+                )
                 clockColorIndex = 0
             }
         }
@@ -387,7 +506,7 @@ fun DepthStudioScreen(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.Undo,
-                        contentDescription = "Undo clock edit",
+                        contentDescription = "Undo edit",
                         tint = if (canUndo) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                         modifier = Modifier.size(18.dp)
@@ -402,7 +521,7 @@ fun DepthStudioScreen(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.Redo,
-                        contentDescription = "Redo clock edit",
+                        contentDescription = "Redo edit",
                         tint = if (canRedo) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                         modifier = Modifier.size(18.dp)
@@ -423,7 +542,10 @@ fun DepthStudioScreen(
                 StudioOptionPill(
                     label = if (isClockEditing) "Done" else "Resize",
                     selected = isClockEditing,
-                    onClick = { isClockEditing = !isClockEditing },
+                    onClick = {
+                        isMaskBrushActive = false
+                        isClockEditing = !isClockEditing
+                    },
                     modifier = Modifier.testTag("clock_toggle_handles_pill")
                 )
 
@@ -465,7 +587,7 @@ fun DepthStudioScreen(
                 .background(Color(0xFF101218))
                 .onSizeChanged { canvasSize = it }
         ) {
-            // Layer 1: Full-resolution wallpaper bitmap (pan/zoom locked >= 1.0f)
+            // Layer 1: Full-resolution wallpaper bitmap with pinch-zoom + 1-finger pan + rotation
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -475,19 +597,33 @@ fun DepthStudioScreen(
                     ) {
                         if (isClockEditing) {
                             isClockEditing = false
-                        } else if (!isCompactStage) {
+                        } else if (!isCompactStage && !isMaskBrushActive) {
                             showControls = !showControls
                         }
                     }
-                    .pointerInput(zoomScale) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val maxPanX = ((canvasSize.width * (zoomScale - 1f)) * 0.5f).coerceAtLeast(180f)
-                            val maxPanY = ((canvasSize.height * (zoomScale - 1f)) * 0.5f).coerceAtLeast(220f)
-                            panOffset = Offset(
-                                x = (panOffset.x + dragAmount.x).coerceIn(-maxPanX, maxPanX),
-                                y = (panOffset.y + dragAmount.y).coerceIn(-maxPanY, maxPanY)
-                            )
+                    .let { mod ->
+                        if (!isMaskBrushActive && !isClockEditing) {
+                            mod.pointerInput(canvasSize) {
+                                detectTransformGestures { _, pan, zoom, rotation ->
+                                    if (zoom != 1f || pan != Offset.Zero || rotation != 0f) {
+                                        startAtomicGesture()
+                                        val nextZoom = (effectiveFraming.zoomScale * zoom).coerceIn(1.0f, 2.2f)
+                                        val maxPanX = ((canvasSize.width * (nextZoom - 1f)) * 0.5f).coerceAtLeast(200f)
+                                        val maxPanY = ((canvasSize.height * (nextZoom - 1f)) * 0.5f).coerceAtLeast(240f)
+                                        val nextPanX = (effectiveFraming.panOffsetX + pan.x).coerceIn(-maxPanX, maxPanX)
+                                        val nextPanY = (effectiveFraming.panOffsetY + pan.y).coerceIn(-maxPanY, maxPanY)
+                                        updateFramingPreview(
+                                            effectiveFraming.copy(
+                                                zoomScale = nextZoom,
+                                                panOffsetX = nextPanX,
+                                                panOffsetY = nextPanY
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            mod
                         }
                     }
             ) {
@@ -504,6 +640,7 @@ fun DepthStudioScreen(
                                 scaleY = zoomScale
                                 translationX = panOffset.x
                                 translationY = panOffset.y
+                                rotationZ = rotationDegrees
                             }
                     )
                 } else {
@@ -520,6 +657,7 @@ fun DepthStudioScreen(
                                 scaleY = zoomScale
                                 translationX = panOffset.x
                                 translationY = panOffset.y
+                                rotationZ = rotationDegrees
                             }
                     )
                 }
@@ -534,7 +672,6 @@ fun DepthStudioScreen(
             }
 
             // Layer 2: Customizable Lock Clock behind the foreground subject cutout
-            // Placed via rect.centerXPx & rect.topPx with TransformOrigin(0.5f, 0f) so pixels align 1:1 with overlay handles
             val clockX = if (clockRect != null && clockMeasuredSize.width > 0) {
                 (clockRect.centerXPx - clockMeasuredSize.width * 0.5f).roundToInt()
             } else {
@@ -565,6 +702,12 @@ fun DepthStudioScreen(
                     useLiveTime = clockConfig.useLiveTime,
                     is24HourFormat = clockConfig.is24HourFormat,
                     showDateAndWeather = clockConfig.showDateAndWeather,
+                    widgetsEnabled = clockConfig.widgetsEnabled,
+                    showDateWidget = clockConfig.showDateWidget,
+                    showWeatherWidget = clockConfig.showWeatherWidget,
+                    showBatteryWidget = clockConfig.showBatteryWidget,
+                    showDecorativeWidget = clockConfig.showDecorativeWidget,
+                    telemetry = widgetTelemetry,
                     signatureMode = clockConfig.signatureMode,
                     signatureText = clockConfig.signatureText,
                     liquidGlassConfig = clockConfig.liquidGlass,
@@ -583,8 +726,8 @@ fun DepthStudioScreen(
                 )
             }
 
-            // Layer 3: Pixel-accurate Depth Engine Foreground Subject Cutout
-            val cutoutBmp = (depthState as? DepthStudioUiState.Ready)?.result?.cutoutBitmap
+            // Layer 3: Depth Engine V2 Foreground Subject Cutout (with optional manual refinement strokes)
+            val cutoutBmp = refinedCutoutBitmap ?: (depthState as? DepthStudioUiState.Ready)?.result?.cutoutBitmap
             if (clockConfig.depthOverlapEnabled && cutoutBmp != null) {
                 Image(
                     bitmap = cutoutBmp.asImageBitmap(),
@@ -598,12 +741,81 @@ fun DepthStudioScreen(
                             scaleY = zoomScale
                             translationX = panOffset.x
                             translationY = panOffset.y
+                            rotationZ = rotationDegrees
                         }
                 )
             }
 
-            // Layer 3.5: Tap-to-Reveal & Single-Grip Continuous Resize/Drag Overlay
-            if (!isClockEditing && clockRect != null && clockMeasuredSize.width > 0) {
+            // Layer 3.2: Manual Depth Mask Brush Painting Overlay
+            if (isMaskBrushActive && canvasSize.width > 0 && canvasSize.height > 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(brushMode, brushRadiusFraction, maskFeather, canvasSize) {
+                            detectDragGestures(
+                                onDragStart = { start ->
+                                    activeBrushPath.clear()
+                                    activeBrushPath.add(start)
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    activeBrushPath.add(change.position)
+                                },
+                                onDragEnd = {
+                                    if (activeBrushPath.isNotEmpty() && canvasSize.width > 0 && canvasSize.height > 0) {
+                                        val w = canvasSize.width.toFloat()
+                                        val h = canvasSize.height.toFloat()
+                                        val normPts = activeBrushPath.map { pt ->
+                                            (pt.x / w).coerceIn(0f, 1f) to (pt.y / h).coerceIn(0f, 1f)
+                                        }
+                                        haptics.performTick(24L)
+                                        onAddMaskStroke?.invoke(
+                                            MaskBrushStroke(
+                                                normalizedPoints = normPts,
+                                                radiusFraction = brushRadiusFraction,
+                                                mode = brushMode,
+                                                featherFraction = maskFeather
+                                            )
+                                        )
+                                    }
+                                    activeBrushPath.clear()
+                                },
+                                onDragCancel = {
+                                    activeBrushPath.clear()
+                                }
+                            )
+                        }
+                        .testTag("depth_mask_brush_canvas")
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        if (activeBrushPath.isNotEmpty()) {
+                            val strokeColor = if (brushMode == MaskBrushMode.KEEP) {
+                                Color(0xFF4CD964).copy(alpha = 0.55f)
+                            } else {
+                                Color(0xFFFF453A).copy(alpha = 0.55f)
+                            }
+                            val path = Path().apply {
+                                moveTo(activeBrushPath.first().x, activeBrushPath.first().y)
+                                for (i in 1 until activeBrushPath.size) {
+                                    lineTo(activeBrushPath[i].x, activeBrushPath[i].y)
+                                }
+                            }
+                            drawPath(
+                                path = path,
+                                color = strokeColor,
+                                style = Stroke(
+                                    width = (brushRadiusFraction * size.minDimension * 2f).coerceAtLeast(16f),
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Layer 3.5: Tap-to-Reveal & Bottom-Corner Continuous Resize/Drag Overlay
+            if (!isClockEditing && !isMaskBrushActive && clockRect != null && clockMeasuredSize.width > 0) {
                 val hitW = with(density) { clockRect.widthPx.toDp() }
                 val hitH = with(density) { clockRect.heightPx.toDp() }
                 Box(
@@ -714,7 +926,9 @@ fun DepthStudioScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = if (depthState.result.isDepthEligible) {
+                                    text = if (isMaskBrushActive) {
+                                        "Paint ${if (brushMode == MaskBrushMode.KEEP) "Keep" else "Erase"} Mask"
+                                    } else if (depthState.result.isDepthEligible) {
                                         val overlapPct = (depthState.result.recommendedClockOverlapFraction * 100f).roundToInt()
                                         if (overlapPct >= 4) {
                                             "Depth ${depthState.result.depthQualityScore}% • ${overlapPct}% tuck"
@@ -834,7 +1048,12 @@ fun DepthStudioScreen(
                         options = DepthSectionTab.entries,
                         selected = activeTab,
                         labelProvider = { it.label },
-                        onSelect = { activeTab = it },
+                        onSelect = {
+                            activeTab = it
+                            if (it != DepthSectionTab.SUBJECT) {
+                                isMaskBrushActive = false
+                            }
+                        },
                         tagPrefix = "depth_tab"
                     )
 
@@ -844,7 +1063,7 @@ fun DepthStudioScreen(
                             .verticalScroll(rememberScrollState())
                     } else {
                         Modifier
-                            .heightIn(max = 280.dp)
+                            .heightIn(max = 290.dp)
                             .verticalScroll(rememberScrollState())
                     }
 
@@ -928,8 +1147,10 @@ fun DepthStudioScreen(
                                     AdaptiveDesignSlider(
                                         value = clockConfig.placementY,
                                         onValueChange = { y ->
+                                            startAtomicGesture()
                                             onPreviewClockConfig(clockConfig.copy(placementY = y))
                                         },
+                                        onValueChangeFinished = { endAtomicGesture() },
                                         valueRange = 0.04f..0.84f,
                                         modifier = Modifier
                                             .weight(1f)
@@ -958,11 +1179,7 @@ fun DepthStudioScreen(
                                                 .weight(1f)
                                                 .testTag("depth_center_clock_button")
                                         ) {
-                                            Icon(
-                                                Icons.Rounded.CenterFocusStrong,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(15.dp)
-                                            )
+                                            Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, modifier = Modifier.size(15.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Center", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
@@ -976,11 +1193,7 @@ fun DepthStudioScreen(
                                                 .weight(1f)
                                                 .testTag("depth_center_clock_button")
                                         ) {
-                                            Icon(
-                                                Icons.Rounded.CenterFocusStrong,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(15.dp)
-                                            )
+                                            Icon(Icons.Rounded.CenterFocusStrong, contentDescription = null, modifier = Modifier.size(15.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Centered", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
@@ -989,9 +1202,13 @@ fun DepthStudioScreen(
                                     OutlinedButton(
                                         onClick = {
                                             haptics.performSnapDetent()
-                                            onAutoSnapClock()
-                                            (depthState as? DepthStudioUiState.Ready)?.result?.let { readyResult ->
-                                                animateWallpaperToDepthFraming(readyResult)
+                                            if (onAutoSnapWithViewport != null && canvasSize.width > 0) {
+                                                onAutoSnapWithViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat())
+                                            } else {
+                                                onAutoSnapClock()
+                                                (depthState as? DepthStudioUiState.Ready)?.result?.let { readyResult ->
+                                                    animateWallpaperToDepthFraming(readyResult)
+                                                }
                                             }
                                         },
                                         shape = RoundedCornerShape(50),
@@ -1000,36 +1217,145 @@ fun DepthStudioScreen(
                                             .weight(1f)
                                             .testTag("depth_auto_snap_button")
                                     ) {
-                                        Icon(
-                                            Icons.Rounded.VerticalAlignTop,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(15.dp)
-                                        )
+                                        Icon(Icons.Rounded.VerticalAlignTop, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text("Auto Snap", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
 
                                     FilledTonalButton(
-                                        onClick = { isClockEditing = !isClockEditing },
+                                        onClick = {
+                                            isMaskBrushActive = false
+                                            isClockEditing = !isClockEditing
+                                        },
                                         shape = RoundedCornerShape(50),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                                         modifier = Modifier
                                             .weight(1f)
                                             .testTag("clock_toggle_handles_chip")
                                     ) {
-                                        Icon(
-                                            Icons.Rounded.OpenWith,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(15.dp)
-                                        )
+                                        Icon(Icons.Rounded.OpenWith, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(if (isClockEditing) "Done" else "Resize", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+
+                                // Depth Engine V2 Manual Mask Refinement drawer
+                                TactileSurface(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                    shape = RoundedCornerShape(18.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .clickable { showMaskBrushDrawer = !showMaskBrushDrawer }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                                .testTag("depth_mask_brush_drawer_toggle"),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Brush,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(17.dp)
+                                                )
+                                                Column {
+                                                    Text(
+                                                        text = "Manual Mask Refinement",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = if (maskStrokes.isEmpty()) "Paint Keep/Erase strokes on subject edges"
+                                                        else "${maskStrokes.size} custom brush stroke(s)",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                            Icon(
+                                                imageVector = if (showMaskBrushDrawer) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                                contentDescription = "Toggle Mask Brush",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        AnimatedVisibility(
+                                            visible = showMaskBrushDrawer,
+                                            enter = AppMotion.drawerEnter(uiStyle, reducedMotion),
+                                            exit = AppMotion.drawerExit(uiStyle, reducedMotion)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    StudioOptionPill(
+                                                        label = if (isMaskBrushActive) "Painting ON" else "Paint Mask",
+                                                        selected = isMaskBrushActive,
+                                                        onClick = {
+                                                            isClockEditing = false
+                                                            isMaskBrushActive = !isMaskBrushActive
+                                                        },
+                                                        modifier = Modifier.testTag("depth_mask_paint_toggle")
+                                                    )
+                                                    StudioOptionPill(
+                                                        label = "Keep",
+                                                        selected = brushMode == MaskBrushMode.KEEP,
+                                                        onClick = { brushMode = MaskBrushMode.KEEP },
+                                                        modifier = Modifier.testTag("depth_mask_keep_pill")
+                                                    )
+                                                    StudioOptionPill(
+                                                        label = "Erase",
+                                                        selected = brushMode == MaskBrushMode.ERASE,
+                                                        onClick = { brushMode = MaskBrushMode.ERASE },
+                                                        modifier = Modifier.testTag("depth_mask_erase_pill")
+                                                    )
+                                                    if (maskStrokes.isNotEmpty() && onClearMaskStrokes != null) {
+                                                        StudioOptionPill(
+                                                            label = "Clear",
+                                                            selected = false,
+                                                            onClick = onClearMaskStrokes,
+                                                            modifier = Modifier.testTag("depth_mask_clear_pill")
+                                                        )
+                                                    }
+                                                }
+                                                StudioParamSlider(
+                                                    label = "Brush",
+                                                    valueText = "${(brushRadiusFraction * 1000).roundToInt()}",
+                                                    value = brushRadiusFraction,
+                                                    valueRange = 0.02f..0.14f,
+                                                    onValueChange = { brushRadiusFraction = it },
+                                                    sliderTag = "depth_brush_size_slider"
+                                                )
+                                                StudioParamSlider(
+                                                    label = "Feather",
+                                                    valueText = "${(maskFeather * 100).roundToInt()}%",
+                                                    value = maskFeather,
+                                                    valueRange = 0.15f..1.25f,
+                                                    onValueChange = { onSetMaskFeather?.invoke(it, false) },
+                                                    sliderTag = "depth_brush_feather_slider"
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
 
                             DepthSectionTab.CLOCK -> {
-                                // Sub-pills keep the Clock workspace sleek and decluttered
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     items(ClockSubSection.entries, key = { it.name }) { sub ->
                                         StudioOptionPill(
@@ -1059,7 +1385,7 @@ fun DepthStudioScreen(
                                                             it.copy(
                                                                 face = face,
                                                                 font = face.recommendedFont,
-                                                                weightLevel = if (face == HyperOsClockFace.POSTER_SPLIT || face == HyperOsClockFace.SPIRE_MONOLITH) 850 else 700,
+                                                                weightLevel = if (face == HyperOsClockFace.POSTER_SPLIT || face == HyperOsClockFace.SPIRE_MONOLITH || face == HyperOsClockFace.TALL_POSTER_1340) 850 else 700,
                                                                 scale = 1.0f,
                                                                 widthScale = 1.0f,
                                                                 heightScale = 1.0f,
@@ -1075,7 +1401,6 @@ fun DepthStudioScreen(
                                     }
 
                                     ClockSubSection.TYPE_FINISH -> {
-                                        // Direct curated font strip (each pill previewed in its own typeface; no category clutter)
                                         LazyRow(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             contentPadding = PaddingValues(end = 8.dp),
@@ -1098,7 +1423,7 @@ fun DepthStudioScreen(
                                                     contentColor = pillFg,
                                                     shape = RoundedCornerShape(50),
                                                     border = if (selectedFont) {
-                                                        androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
+                                                        BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
                                                     } else {
                                                         glassSpecularBorder()
                                                     },
@@ -1141,26 +1466,42 @@ fun DepthStudioScreen(
                                             }
                                         }
 
-                                        StudioParamSlider(
-                                            label = "Weight",
-                                            valueText = "${clockConfig.weightLevel}",
-                                            value = clockConfig.weightLevel.toFloat(),
-                                            valueRange = 100f..900f,
-                                            onValueChange = { w ->
-                                                onPreviewClockConfig(clockConfig.copy(weightLevel = w.roundToInt()))
-                                            },
-                                            sliderTag = "clock_weight_slider"
-                                        )
-                                        StudioParamSlider(
-                                            label = "Opacity",
-                                            valueText = "${(clockConfig.opacity * 100).roundToInt()}%",
-                                            value = clockConfig.opacity,
-                                            valueRange = 0.20f..1.0f,
-                                            onValueChange = { a ->
-                                                onPreviewClockConfig(clockConfig.copy(opacity = a))
-                                            },
-                                            sliderTag = "clock_opacity_slider"
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text("Weight", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.width(56.dp))
+                                            AdaptiveDesignSlider(
+                                                value = clockConfig.weightLevel.toFloat(),
+                                                onValueChange = { w ->
+                                                    startAtomicGesture()
+                                                    onPreviewClockConfig(clockConfig.copy(weightLevel = w.roundToInt()))
+                                                },
+                                                onValueChangeFinished = { endAtomicGesture() },
+                                                valueRange = 100f..900f,
+                                                modifier = Modifier.weight(1f).testTag("clock_weight_slider")
+                                            )
+                                            Text("${clockConfig.weightLevel}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(42.dp))
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text("Opacity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.width(56.dp))
+                                            AdaptiveDesignSlider(
+                                                value = clockConfig.opacity,
+                                                onValueChange = { a ->
+                                                    startAtomicGesture()
+                                                    onPreviewClockConfig(clockConfig.copy(opacity = a))
+                                                },
+                                                onValueChangeFinished = { endAtomicGesture() },
+                                                valueRange = 0.20f..1.0f,
+                                                modifier = Modifier.weight(1f).testTag("clock_opacity_slider")
+                                            )
+                                            Text("${(clockConfig.opacity * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(42.dp))
+                                        }
 
                                         if (clockConfig.finish == HyperOsClockFinish.BLUR_GLASS) {
                                             val glassCfg = clockConfig.liquidGlass
@@ -1194,7 +1535,7 @@ fun DepthStudioScreen(
                                                             )
                                                             Column {
                                                                 Text(
-                                                                    text = "Glass Optics",
+                                                                    text = "Glass Settings",
                                                                     style = MaterialTheme.typography.titleSmall,
                                                                     color = MaterialTheme.colorScheme.onSurface
                                                                 )
@@ -1207,7 +1548,7 @@ fun DepthStudioScreen(
                                                         }
                                                         Icon(
                                                             imageVector = if (showGlassOpticsDrawer) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                                            contentDescription = if (showGlassOpticsDrawer) "Collapse Glass Optics" else "Expand Glass Optics",
+                                                            contentDescription = if (showGlassOpticsDrawer) "Collapse Glass Settings" else "Expand Glass Settings",
                                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
                                                     }
@@ -1273,116 +1614,39 @@ fun DepthStudioScreen(
                                                                 )
                                                             }
 
-                                                            StudioParamSlider(
-                                                                label = "Refract",
-                                                                valueText = String.format(Locale.US, "%.0f", glassCfg.refractionStrength),
-                                                                value = glassCfg.refractionStrength,
-                                                                valueRange = 0f..40f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(refractionStrength = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_refraction_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "IOR",
-                                                                valueText = String.format(Locale.US, "%.2f", glassCfg.ior),
-                                                                value = glassCfg.ior,
-                                                                valueRange = 1.00f..1.80f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(ior = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_ior_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Bevel",
-                                                                valueText = "${glassCfg.bevelWidth.roundToInt()}px",
-                                                                value = glassCfg.bevelWidth,
-                                                                valueRange = 2f..24f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(bevelWidth = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_bevel_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Prism",
-                                                                valueText = "${(glassCfg.chromaticAberration * 100).roundToInt()}%",
-                                                                value = glassCfg.chromaticAberration,
-                                                                valueRange = 0f..1f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(chromaticAberration = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_chromatic_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Frost",
-                                                                valueText = "${glassCfg.frostBlur.roundToInt()}px",
-                                                                value = glassCfg.frostBlur,
-                                                                valueRange = 0f..24f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(frostBlur = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_frost_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Vivid",
-                                                                valueText = String.format(Locale.US, "%.2fx", glassCfg.glassSaturation),
-                                                                value = glassCfg.glassSaturation,
-                                                                valueRange = 1.0f..2.0f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(glassSaturation = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_saturation_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Tint",
-                                                                valueText = "${(glassCfg.tintOpacity * 100).roundToInt()}%",
-                                                                value = glassCfg.tintOpacity,
-                                                                valueRange = 0f..0.50f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(tintOpacity = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_tint_opacity_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Gloss",
-                                                                valueText = "${(glassCfg.specularIntensity * 100).roundToInt()}%",
-                                                                value = glassCfg.specularIntensity,
-                                                                valueRange = 0f..1.50f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(specularIntensity = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_specular_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Light",
-                                                                valueText = "${glassCfg.lightAngle.roundToInt()}°",
-                                                                value = glassCfg.lightAngle,
-                                                                valueRange = 0f..360f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(lightAngle = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_light_angle_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Rim Dark",
-                                                                valueText = "${(glassCfg.innerThicknessShadow * 100).roundToInt()}%",
-                                                                value = glassCfg.innerThicknessShadow,
-                                                                valueRange = 0f..0.60f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(innerThicknessShadow = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_inner_shadow_slider"
-                                                            )
-                                                            StudioParamSlider(
-                                                                label = "Depth",
-                                                                valueText = "${(glassCfg.backdropDropShadow * 100).roundToInt()}%",
-                                                                value = glassCfg.backdropDropShadow,
-                                                                valueRange = 0f..1.0f,
-                                                                onValueChange = { v ->
-                                                                    onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(backdropDropShadow = v).sanitized()))
-                                                                },
-                                                                sliderTag = "glass_drop_shadow_slider"
-                                                            )
+                                                            GlassAtomicSlider("Refract", String.format(Locale.US, "%.0f", glassCfg.refractionStrength), glassCfg.refractionStrength, 0f..40f, "glass_refraction_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(refractionStrength = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("IOR", String.format(Locale.US, "%.2f", glassCfg.ior), glassCfg.ior, 1.00f..1.80f, "glass_ior_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(ior = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Bevel", "${glassCfg.bevelWidth.roundToInt()}px", glassCfg.bevelWidth, 2f..24f, "glass_bevel_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(bevelWidth = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Prism", "${(glassCfg.chromaticAberration * 100).roundToInt()}%", glassCfg.chromaticAberration, 0f..1f, "glass_chromatic_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(chromaticAberration = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Frost", "${glassCfg.frostBlur.roundToInt()}px", glassCfg.frostBlur, 0f..24f, "glass_frost_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(frostBlur = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Vivid", String.format(Locale.US, "%.2fx", glassCfg.glassSaturation), glassCfg.glassSaturation, 1.0f..2.0f, "glass_saturation_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(glassSaturation = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Tint", "${(glassCfg.tintOpacity * 100).roundToInt()}%", glassCfg.tintOpacity, 0f..0.50f, "glass_tint_opacity_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(tintOpacity = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Gloss", "${(glassCfg.specularIntensity * 100).roundToInt()}%", glassCfg.specularIntensity, 0f..1.50f, "glass_specular_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(specularIntensity = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Light", "${glassCfg.lightAngle.roundToInt()}°", glassCfg.lightAngle, 0f..360f, "glass_light_angle_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(lightAngle = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Rim Dark", "${(glassCfg.innerThicknessShadow * 100).roundToInt()}%", glassCfg.innerThicknessShadow, 0f..0.60f, "glass_inner_shadow_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(innerThicknessShadow = v).sanitized()))
+                                                            }
+                                                            GlassAtomicSlider("Depth", "${(glassCfg.backdropDropShadow * 100).roundToInt()}%", glassCfg.backdropDropShadow, 0f..1.0f, "glass_drop_shadow_slider", ::startAtomicGesture, ::endAtomicGesture) { v ->
+                                                                onPreviewClockConfig(clockConfig.copy(liquidGlass = glassCfg.copy(backdropDropShadow = v).sanitized()))
+                                                            }
 
                                                             Row(
                                                                 modifier = Modifier.fillMaxWidth(),
@@ -1397,7 +1661,7 @@ fun DepthStudioScreen(
                                                                 ) {
                                                                     Icon(Icons.Rounded.RestartAlt, contentDescription = null, modifier = Modifier.size(14.dp))
                                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                                    Text("Reset Optics", style = MaterialTheme.typography.labelSmall)
+                                                                    Text("Reset Glass", style = MaterialTheme.typography.labelSmall)
                                                                 }
                                                             }
                                                         }
@@ -1559,6 +1823,7 @@ fun DepthStudioScreen(
                                                     AdaptiveDesignSlider(
                                                         value = pickerHue,
                                                         onValueChange = { h ->
+                                                            startAtomicGesture()
                                                             pickerHue = h
                                                             val argb = Color.hsv(h, pickerSat, pickerVal).toArgb().toLong() and 0xFFFFFFFFL
                                                             onPreviewClockConfig(
@@ -1569,30 +1834,32 @@ fun DepthStudioScreen(
                                                                 }
                                                             )
                                                         },
+                                                        onValueChangeFinished = { endAtomicGesture() },
                                                         valueRange = 0f..360f,
                                                         thumbColorOverride = previewPicked,
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .testTag("clock_color_hue_slider")
                                                     )
-                                                    StudioParamSlider(
+                                                    GlassAtomicSlider(
                                                         label = "Tint",
                                                         valueText = "${(pickerSat * 100).roundToInt()}%",
                                                         value = pickerSat,
                                                         valueRange = 0f..1f,
-                                                        onValueChange = { s ->
-                                                            pickerSat = s
-                                                            val argb = Color.hsv(pickerHue, s, pickerVal).toArgb().toLong() and 0xFFFFFFFFL
-                                                            onPreviewClockConfig(
-                                                                if (colorTarget == CustomColorTarget.PRIMARY) {
-                                                                    clockConfig.copy(customPrimaryArgb = argb)
-                                                                } else {
-                                                                    clockConfig.copy(customSecondaryArgb = argb)
-                                                                }
-                                                            )
-                                                        },
-                                                        sliderTag = "clock_color_sat_slider"
-                                                    )
+                                                        sliderTag = "clock_color_sat_slider",
+                                                        onGestureStart = ::startAtomicGesture,
+                                                        onGestureEnd = ::endAtomicGesture
+                                                    ) { s ->
+                                                        pickerSat = s
+                                                        val argb = Color.hsv(pickerHue, s, pickerVal).toArgb().toLong() and 0xFFFFFFFFL
+                                                        onPreviewClockConfig(
+                                                            if (colorTarget == CustomColorTarget.PRIMARY) {
+                                                                clockConfig.copy(customPrimaryArgb = argb)
+                                                            } else {
+                                                                clockConfig.copy(customSecondaryArgb = argb)
+                                                            }
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1636,50 +1903,207 @@ fun DepthStudioScreen(
                                             }
                                         }
 
-                                        StudioParamSlider(
+                                        GlassAtomicSlider(
                                             label = "Width",
                                             valueText = "${(clockConfig.widthScale * 100).roundToInt()}%",
                                             value = clockConfig.widthScale,
                                             valueRange = ClockSpatialMath.MIN_WIDTH_SCALE..ClockSpatialMath.MAX_WIDTH_SCALE,
-                                            onValueChange = { w ->
-                                                val raw = clockConfig.copy(widthScale = w)
-                                                val resolved = if (canvasSize.width > 0 && clockMeasuredSize.width > 0) {
-                                                    ClockSpatialMath.applyAspectAdaptiveResolution(
-                                                        updatedConfig = raw,
-                                                        unscaledWidthPx = clockMeasuredSize.width.toFloat(),
-                                                        unscaledHeightPx = clockMeasuredSize.height.toFloat(),
-                                                        viewportSize = canvasSize
-                                                    )
-                                                } else raw
-                                                if (resolved.face != clockConfig.face) {
-                                                    haptics.performSnapDetent()
-                                                }
-                                                onPreviewClockConfig(resolved)
-                                            },
-                                            sliderTag = "clock_width_slider"
-                                        )
-                                        StudioParamSlider(
+                                            sliderTag = "clock_width_slider",
+                                            onGestureStart = ::startAtomicGesture,
+                                            onGestureEnd = ::endAtomicGesture
+                                        ) { w ->
+                                            val raw = clockConfig.copy(widthScale = w)
+                                            val resolved = if (canvasSize.width > 0 && clockMeasuredSize.width > 0) {
+                                                ClockSpatialMath.applyAspectAdaptiveResolution(
+                                                    updatedConfig = raw,
+                                                    unscaledWidthPx = clockMeasuredSize.width.toFloat(),
+                                                    unscaledHeightPx = clockMeasuredSize.height.toFloat(),
+                                                    viewportSize = canvasSize
+                                                )
+                                            } else raw
+                                            if (resolved.face != clockConfig.face) {
+                                                haptics.performSnapDetent()
+                                            }
+                                            onPreviewClockConfig(resolved)
+                                        }
+                                        GlassAtomicSlider(
                                             label = "Height",
                                             valueText = "${(clockConfig.heightScale * 100).roundToInt()}%",
                                             value = clockConfig.heightScale,
                                             valueRange = ClockSpatialMath.MIN_HEIGHT_SCALE..ClockSpatialMath.MAX_HEIGHT_SCALE,
-                                            onValueChange = { h ->
-                                                val raw = clockConfig.copy(heightScale = h)
-                                                val resolved = if (canvasSize.width > 0 && clockMeasuredSize.width > 0) {
-                                                    ClockSpatialMath.applyAspectAdaptiveResolution(
-                                                        updatedConfig = raw,
-                                                        unscaledWidthPx = clockMeasuredSize.width.toFloat(),
-                                                        unscaledHeightPx = clockMeasuredSize.height.toFloat(),
-                                                        viewportSize = canvasSize
+                                            sliderTag = "clock_height_slider",
+                                            onGestureStart = ::startAtomicGesture,
+                                            onGestureEnd = ::endAtomicGesture
+                                        ) { h ->
+                                            val raw = clockConfig.copy(heightScale = h)
+                                            val resolved = if (canvasSize.width > 0 && clockMeasuredSize.width > 0) {
+                                                ClockSpatialMath.applyAspectAdaptiveResolution(
+                                                    updatedConfig = raw,
+                                                    unscaledWidthPx = clockMeasuredSize.width.toFloat(),
+                                                    unscaledHeightPx = clockMeasuredSize.height.toFloat(),
+                                                    viewportSize = canvasSize
+                                                )
+                                            } else raw
+                                            if (resolved.face != clockConfig.face) {
+                                                haptics.performSnapDetent()
+                                            }
+                                            onPreviewClockConfig(resolved)
+                                        }
+
+                                        // Studio Lock-Screen Widgets drawer (Date, Live Open-Meteo Weather, Battery, Decorative)
+                                        TactileSurface(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                            shape = RoundedCornerShape(18.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(18.dp))
+                                                        .clickable { showWidgetsDrawer = !showWidgetsDrawer }
+                                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                                        .testTag("studio_widgets_drawer_toggle"),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Rounded.Widgets,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(17.dp)
+                                                        )
+                                                        Text(
+                                                            text = "Lock-Screen Widgets",
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
+                                                    Icon(
+                                                        imageVector = if (showWidgetsDrawer) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                                        contentDescription = "Toggle Lock-Screen Widgets",
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
-                                                } else raw
-                                                if (resolved.face != clockConfig.face) {
-                                                    haptics.performSnapDetent()
                                                 }
-                                                onPreviewClockConfig(resolved)
-                                            },
-                                            sliderTag = "clock_height_slider"
-                                        )
+
+                                                AnimatedVisibility(
+                                                    visible = showWidgetsDrawer,
+                                                    enter = AppMotion.drawerEnter(uiStyle, reducedMotion),
+                                                    exit = AppMotion.drawerExit(uiStyle, reducedMotion)
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            item {
+                                                                StudioOptionPill(
+                                                                    label = "Widgets",
+                                                                    selected = clockConfig.widgetsEnabled,
+                                                                    onClick = {
+                                                                        onCommitClockConfig { it.copy(widgetsEnabled = !it.widgetsEnabled) }
+                                                                    },
+                                                                    modifier = Modifier.testTag("widget_master_pill")
+                                                                )
+                                                            }
+                                                            item {
+                                                                StudioOptionPill(
+                                                                    label = "Date",
+                                                                    selected = clockConfig.showDateWidget,
+                                                                    onClick = {
+                                                                        onCommitClockConfig { it.copy(showDateWidget = !it.showDateWidget) }
+                                                                    },
+                                                                    modifier = Modifier.testTag("widget_date_pill")
+                                                                )
+                                                            }
+                                                            item {
+                                                                StudioOptionPill(
+                                                                    label = "Weather",
+                                                                    selected = clockConfig.showWeatherWidget,
+                                                                    onClick = {
+                                                                        onCommitClockConfig { it.copy(showWeatherWidget = !it.showWeatherWidget) }
+                                                                    },
+                                                                    modifier = Modifier.testTag("widget_weather_pill")
+                                                                )
+                                                            }
+                                                            item {
+                                                                StudioOptionPill(
+                                                                    label = "Battery",
+                                                                    selected = clockConfig.showBatteryWidget,
+                                                                    onClick = {
+                                                                        onCommitClockConfig { it.copy(showBatteryWidget = !it.showBatteryWidget) }
+                                                                    },
+                                                                    modifier = Modifier.testTag("widget_battery_pill")
+                                                                )
+                                                            }
+                                                            item {
+                                                                StudioOptionPill(
+                                                                    label = "Accent Dot",
+                                                                    selected = clockConfig.showDecorativeWidget,
+                                                                    onClick = {
+                                                                        onCommitClockConfig { it.copy(showDecorativeWidget = !it.showDecorativeWidget) }
+                                                                    },
+                                                                    modifier = Modifier.testTag("widget_decorative_pill")
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        ) {
+                                                            OutlinedTextField(
+                                                                value = cityDraft,
+                                                                onValueChange = { cityDraft = it.take(40) },
+                                                                label = { Text("Weather City") },
+                                                                placeholder = { Text("e.g. Tokyo, London") },
+                                                                singleLine = true,
+                                                                modifier = Modifier
+                                                                    .weight(1f)
+                                                                    .testTag("widget_weather_city_input")
+                                                            )
+                                                            FilledTonalButton(
+                                                                onClick = {
+                                                                    onWeatherCityChange?.invoke(cityDraft)
+                                                                    onRefreshWeather?.invoke(cityDraft, false)
+                                                                },
+                                                                shape = RoundedCornerShape(14.dp),
+                                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+                                                                modifier = Modifier.testTag("widget_weather_fetch_btn")
+                                                            ) {
+                                                                Text("Sync", style = MaterialTheme.typography.labelMedium)
+                                                            }
+                                                            IconButton(
+                                                                onClick = {
+                                                                    val hasLoc = ContextCompat.checkSelfPermission(
+                                                                        appContext,
+                                                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                                                    ) == PackageManager.PERMISSION_GRANTED
+                                                                    if (hasLoc) {
+                                                                        onRefreshWeather?.invoke("", true)
+                                                                    } else {
+                                                                        coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                                                    }
+                                                                },
+                                                                modifier = Modifier.testTag("widget_weather_gps_btn")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Rounded.MyLocation,
+                                                                    contentDescription = "Use coarse location for weather"
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
 
                                         // Secondary toggles & signature tucked cleanly in a collapsible drawer
                                         TactileSurface(
@@ -1795,6 +2219,7 @@ fun DepthStudioScreen(
                                                         OutlinedTextField(
                                                             value = clockConfig.signatureText,
                                                             onValueChange = { txt ->
+                                                                startAtomicGesture()
                                                                 onPreviewClockConfig(clockConfig.copy(signatureText = txt.take(36)))
                                                             },
                                                             label = { Text("Custom Signature") },
@@ -1830,51 +2255,130 @@ fun DepthStudioScreen(
                             }
 
                             DepthSectionTab.WALLPAPER -> {
+                                // Dual-styled Backdrop Picker CTA (App catalog browser + Android Photo Picker)
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = "Zoom",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    AdaptiveDesignSlider(
-                                        value = zoomScale,
-                                        onValueChange = { zoomScale = it },
-                                        valueRange = 1.0f..1.80f,
+                                    FilledTonalButton(
+                                        onClick = { showCatalogPickerDialog = true },
+                                        shape = RoundedCornerShape(50),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .testTag("depth_zoom_slider")
-                                    )
-                                    TextButton(
-                                        onClick = {
-                                            zoomScale = 1.0f
-                                            panOffset = Offset.Zero
-                                        },
-                                        contentPadding = PaddingValues(horizontal = 6.dp)
+                                            .testTag("canvas_pick_catalog_button")
                                     ) {
-                                        Text("${(zoomScale * 100).roundToInt()}%")
+                                        Icon(Icons.Rounded.Wallpaper, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("App Backdrops", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            photoPickerLauncher.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            )
+                                        },
+                                        shape = RoundedCornerShape(50),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("canvas_pick_device_photo_button")
+                                    ) {
+                                        Icon(Icons.Rounded.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Device Photo", maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
 
-                                StudioParamSlider(
+                                GlassAtomicSlider(
+                                    label = "Zoom",
+                                    valueText = "${(zoomScale * 100).roundToInt()}%",
+                                    value = zoomScale,
+                                    valueRange = 1.0f..2.2f,
+                                    sliderTag = "depth_zoom_slider",
+                                    onGestureStart = ::startAtomicGesture,
+                                    onGestureEnd = ::endAtomicGesture
+                                ) { z ->
+                                    updateFramingPreview(effectiveFraming.copy(zoomScale = z))
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("Rotate", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.width(56.dp))
+                                    AdaptiveDesignSlider(
+                                        value = rotationDegrees,
+                                        onValueChange = { deg ->
+                                            startAtomicGesture()
+                                            updateFramingPreview(effectiveFraming.copy(rotationDegrees = deg))
+                                        },
+                                        onValueChangeFinished = { endAtomicGesture() },
+                                        valueRange = -180f..180f,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("depth_rotate_slider")
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            haptics.performTick(24L)
+                                            val snapped = ((rotationDegrees + 90f) % 360f).let {
+                                                if (it > 180f) it - 360f else it
+                                            }
+                                            commitFramingChange { it.copy(rotationDegrees = snapped) }
+                                        },
+                                        modifier = Modifier.size(34.dp).testTag("depth_rotate_90_button")
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Rounded.RotateRight, contentDescription = "Rotate 90 degrees", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+
+                                GlassAtomicSlider(
                                     label = "Dim",
                                     valueText = "${(dimFraction * 100).roundToInt()}%",
                                     value = dimFraction,
                                     valueRange = 0f..0.45f,
-                                    onValueChange = { dimFraction = it },
-                                    sliderTag = "depth_dim_slider"
-                                )
+                                    sliderTag = "depth_dim_slider",
+                                    onGestureStart = ::startAtomicGesture,
+                                    onGestureEnd = ::endAtomicGesture
+                                ) { d ->
+                                    updateFramingPreview(effectiveFraming.copy(dimFraction = d))
+                                }
 
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    items(CanvasLookFilter.entries) { filter ->
-                                        StudioOptionPill(
-                                            label = filter.label,
-                                            selected = lookFilter == filter,
-                                            onClick = { lookFilter = filter }
-                                        )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    LazyRow(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        items(CanvasLookFilter.entries) { filter ->
+                                            StudioOptionPill(
+                                                label = filter.label,
+                                                selected = lookFilter == filter,
+                                                onClick = {
+                                                    commitFramingChange { it.copy(lookFilter = filter) }
+                                                }
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    TextButton(
+                                        onClick = {
+                                            haptics.performSnapDetent()
+                                            if (onResetCanvasFraming != null) {
+                                                onResetCanvasFraming()
+                                            } else {
+                                                localFraming = CanvasFramingState()
+                                            }
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                        modifier = Modifier.testTag("depth_reset_framing_button")
+                                    ) {
+                                        Text("Reset")
                                     }
                                 }
                             }
@@ -1925,7 +2429,7 @@ fun DepthStudioScreen(
                         color = Color(0xFF101218),
                         shape = RoundedCornerShape(28.dp),
                         border = glassSpecularBorder(),
-                        shadowElevation = if (isGlass) 8.dp else 2.dp,
+                        shadowElevation = if (isGlass) 0.dp else 2.dp,
                         modifier = Modifier
                             .weight(1.1f)
                             .fillMaxHeight()
@@ -1981,6 +2485,21 @@ fun DepthStudioScreen(
         }
     }
 
+    if (showCatalogPickerDialog) {
+        StudioWallpaperCatalogPickerDialog(
+            selectedWallpaperId = activeWallpaper.id,
+            onDismiss = { showCatalogPickerDialog = false },
+            onSelectWallpaper = { picked ->
+                showCatalogPickerDialog = false
+                customPhotoUri = null
+                activeWallpaper = picked
+                lastAutoAppliedKey = null
+                updateFramingPreview(CanvasFramingState())
+                onLoadWallpaper(picked, false)
+            }
+        )
+    }
+
     if (showApplyDialog) {
         StudioWallpaperTargetDialog(
             title = if (customPhotoUri != null) "Custom Depth Photo" else "${activeWallpaper.category.displayName} Canvas",
@@ -1999,7 +2518,8 @@ fun DepthStudioScreen(
                         dimFraction = dimFraction,
                         lookFilter = lookFilter,
                         targetScreenAspect = screenAspect,
-                        allowParallaxWidth = parallaxWidth
+                        allowParallaxWidth = parallaxWidth,
+                        rotationDegrees = rotationDegrees
                     )
                     onApplyCustomBitmapWallpaper(bitmapToApply, target, allowHomeParallax)
                 } else {
@@ -2020,7 +2540,7 @@ fun DepthStudioScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Save your wallpaper crop, depth tuck, clock style, and glass optics locally to Collections.",
+                        text = "Save your wallpaper crop, depth tuck, clock style, and glass settings locally to Collections.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2048,6 +2568,7 @@ fun DepthStudioScreen(
                             zoomScale = zoomScale,
                             panOffsetX = panOffset.x,
                             panOffsetY = panOffset.y,
+                            rotationDegrees = rotationDegrees,
                             dimFraction = dimFraction,
                             lookFilterName = lookFilter.name,
                             isFavorite = initialSet?.isFavorite ?: false
@@ -2068,5 +2589,149 @@ fun DepthStudioScreen(
             },
             modifier = Modifier.testTag("save_set_dialog")
         )
+    }
+}
+
+@Composable
+private fun GlassAtomicSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    sliderTag: String,
+    onGestureStart: () -> Unit,
+    onGestureEnd: () -> Unit,
+    onValueChange: (Float) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.width(56.dp)
+        )
+        AdaptiveDesignSlider(
+            value = value,
+            onValueChange = { next ->
+                onGestureStart()
+                onValueChange(next)
+            },
+            onValueChangeFinished = onGestureEnd,
+            valueRange = valueRange,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(sliderTag)
+        )
+        Text(
+            text = valueText,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(42.dp)
+        )
+    }
+}
+
+@Composable
+private fun StudioWallpaperCatalogPickerDialog(
+    selectedWallpaperId: String,
+    onDismiss: () -> Unit,
+    onSelectWallpaper: (Wallpaper) -> Unit
+) {
+    var selectedCategory by remember { mutableStateOf<WallpaperCategory?>(null) }
+    val itemsToShow = remember(selectedCategory) {
+        val base = if (selectedCategory == null) {
+            WallpaperCatalog.allWallpapers.sortedByDescending { it.supportsDepthEffect }
+        } else {
+            WallpaperCatalog.allWallpapers.filter { it.category == selectedCategory }
+        }
+        base.take(72)
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        TactileSurface(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .widthIn(max = 500.dp)
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .testTag("studio_catalog_picker_dialog")
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Choose Backdrop",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close")
+                    }
+                }
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item {
+                        StudioOptionPill(
+                            label = "All",
+                            selected = selectedCategory == null,
+                            onClick = { selectedCategory = null }
+                        )
+                    }
+                    items(WallpaperCategory.entries, key = { it.name }) { cat ->
+                        StudioOptionPill(
+                            label = cat.displayName,
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat }
+                        )
+                    }
+                }
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    items(itemsToShow, key = { it.id }) { wp ->
+                        val isSelected = wp.id == selectedWallpaperId
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(0.68f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(
+                                    width = if (isSelected) 2.5.dp else 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .clickable { onSelectWallpaper(wp) }
+                                .testTag("studio_picker_wp_${wp.id}")
+                        ) {
+                            WallpaperAsyncImage(
+                                wallpaper = wp,
+                                useFullRes = false,
+                                contentDescription = wp.category.displayName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

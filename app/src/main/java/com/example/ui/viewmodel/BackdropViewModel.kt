@@ -12,10 +12,13 @@ import com.example.data.media.BackdropImageLoader
 import com.example.data.media.DownloadProgress
 import com.example.data.media.WallpaperMediaService
 import com.example.data.media.WallpaperTarget
+import com.example.data.model.AppLanguageOption
 import com.example.data.model.ColorFamily
 import com.example.data.model.DiscoveryCollection
+import com.example.data.model.DockLayoutMode
 import com.example.data.model.ImageQualityPref
 import com.example.data.model.LockScreenSetDoc
+import com.example.data.model.MaterialNavStyle
 import com.example.data.model.ResolutionTier
 import com.example.data.model.SearchFilters
 import com.example.data.model.SearchSort
@@ -460,6 +463,219 @@ class BackdropViewModel(
         val clamped = intensity.coerceIn(0.55f, 1.45f)
         viewModelScope.launch {
             syncRepository.updatePreferences(currentUserId) { it.copy(glassDepthIntensity = clamped) }
+        }
+    }
+
+    fun setLanguageCode(code: String) {
+        val normalized = AppLanguageOption.fromCode(code).code
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(languageCode = normalized) }
+        }
+    }
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(onboardingCompleted = completed) }
+        }
+    }
+
+    fun setDynamicThemingEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(dynamicThemingEnabled = enabled) }
+        }
+    }
+
+    fun setCustomAccentHex(argb: Long) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(customAccentHex = argb) }
+        }
+    }
+
+    fun setDockLayoutMode(mode: DockLayoutMode) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(dockLayoutMode = mode.name) }
+        }
+    }
+
+    fun setUseClassicClockHandles(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(useClassicClockHandles = enabled) }
+        }
+    }
+
+    fun setM3SurfaceDepth(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3SurfaceDepth = clamped) }
+        }
+    }
+
+    fun setM3CornerRadiusScale(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3CornerRadiusScale = clamped) }
+        }
+    }
+
+    fun setM3ElevationScale(v: Float) {
+        val clamped = v.coerceIn(0.4f, 1.6f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3ElevationScale = clamped) }
+        }
+    }
+
+    fun setM3DensityScale(v: Float) {
+        val clamped = v.coerceIn(0.75f, 1.25f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3DensityScale = clamped) }
+        }
+    }
+
+    fun setM3NavStyle(style: MaterialNavStyle) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3NavStyle = style.name) }
+        }
+    }
+
+    fun setM3TypographyScale(v: Float) {
+        val clamped = v.coerceIn(0.85f, 1.25f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3TypographyScale = clamped) }
+        }
+    }
+
+    fun setM3MotionSpeed(v: Float) {
+        val clamped = v.coerceIn(0.6f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(m3MotionSpeed = clamped) }
+        }
+    }
+
+    fun setGlassBlurLevel(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.6f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassBlurLevel = clamped) }
+        }
+    }
+
+    fun setGlassRefractionLevel(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.6f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassRefractionLevel = clamped) }
+        }
+    }
+
+    fun setGlassTransparencyLevel(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassTransparencyLevel = clamped) }
+        }
+    }
+
+    fun setGlassLightResponse(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassLightResponse = clamped) }
+        }
+    }
+
+    fun setGlassSpecularHighlights(v: Float) {
+        val clamped = v.coerceIn(0.2f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassSpecularHighlights = clamped) }
+        }
+    }
+
+    fun setGlassBorderSoftness(v: Float) {
+        val clamped = v.coerceIn(0.5f, 1.5f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassBorderSoftness = clamped) }
+        }
+    }
+
+    fun setGlassAdaptiveContrast(v: Float) {
+        val clamped = v.coerceIn(0.6f, 1.4f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassAdaptiveContrast = clamped) }
+        }
+    }
+
+    fun setWeatherCity(city: String) {
+        val clean = city.trim().take(60)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(weatherCity = clean) }
+        }
+    }
+
+    fun setWeatherUseLocation(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(weatherUseLocation = enabled) }
+        }
+    }
+
+    fun setLockScreenOverlayEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(lockScreenOverlayEnabled = enabled) }
+        }
+    }
+
+    fun setActiveOverlaySetId(setId: String) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(activeOverlaySetId = setId) }
+        }
+    }
+
+    fun resetMaterial3Customizations() {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { prefs ->
+                prefs.copy(
+                    dynamicThemingEnabled = true,
+                    customAccentHex = 0xFF6B57A8,
+                    m3SurfaceDepth = 1.0f,
+                    m3CornerRadiusScale = 1.0f,
+                    m3ElevationScale = 1.0f,
+                    m3DensityScale = 1.0f,
+                    m3NavStyle = MaterialNavStyle.PILL_TONAL.name,
+                    m3TypographyScale = 1.0f,
+                    m3MotionSpeed = 1.0f
+                )
+            }
+            _events.tryEmit("Reset Material 3 styling defaults")
+        }
+    }
+
+    fun resetFrostedGlassCustomizations() {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { prefs ->
+                prefs.copy(
+                    glassDepthIntensity = 1.0f,
+                    glassBlurLevel = 1.0f,
+                    glassRefractionLevel = 1.0f,
+                    glassTransparencyLevel = 1.0f,
+                    glassLightResponse = 1.0f,
+                    glassSpecularHighlights = 1.0f,
+                    glassBorderSoftness = 1.0f,
+                    glassAdaptiveContrast = 1.0f
+                )
+            }
+            _events.tryEmit("Reset Frosted Glass defaults")
+        }
+    }
+
+    fun restoreAllPreferenceDefaults() {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { prefs ->
+                // Preserve onboarding completion, overlay set id, and search history while resetting preferences.
+                // Never touches user's saved Lock-Screen Sets or Favorites.
+                UserPreferencesDoc(
+                    id = prefs.id,
+                    userId = prefs.userId,
+                    onboardingCompleted = prefs.onboardingCompleted,
+                    activeOverlaySetId = prefs.activeOverlaySetId,
+                    recentSearches = prefs.recentSearches
+                )
+            }
+            _events.tryEmit("Restored default preferences (Lock-Screen Sets kept)")
         }
     }
 

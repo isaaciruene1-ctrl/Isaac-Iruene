@@ -2,6 +2,7 @@ package com.example.engine.depth
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.LruCache
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import kotlinx.coroutines.Dispatchers
@@ -10,30 +11,40 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Deterministic, pixel-accurate on-device Depth Detection Engine for Backdrops.
+ * Deterministic, pixel-accurate on-device Depth Detection Engine V2 for Backdrops.
  *
  * Pipeline:
- * 1. Safe software ARGB_8888 normalization + aspect-preserving analysis grid (<= 360px wide).
+ * 1. Bounded LRU cutout cache + safe ARGB_8888 normalization (<= 360px analysis grid).
  * 2. Perceptual CIE L*a*b* conversion + binomial noise suppression + Sobel contour magnitude.
- * 3. Smooth-Sky Geodesic Edge-Barrier Propagation (4-directional raster sweeps x 2 iterations):
- *    smooth gradient skies accumulate ~0 barrier cost while foreground boundaries create sharp jumps.
+ * 3. Smooth-Sky Geodesic Edge-Barrier Propagation (4-directional raster sweeps x 2 iterations).
  * 4. Adaptive Upper-Sky Prototype Divergence + Boundary-Guided Saliency Fusion & Otsu thresholding.
  * 5. Connected-component denoising, border-seeded interior hole closing, and lock-clock overlap
- *    eligibility verification (ensures open headroom above a distinct foreground subject).
- * 6. Full-resolution Luminance-Guided Joint Alpha Upsampling along silhouette edges for zero haloing.
+ *    eligibility verification.
+ * 6. Full-resolution Luminance-Guided Joint Alpha Upsampling + interactive Keep/Erase brush refinement.
  */
 class DepthDetectionEngine {
 
+    private val cutoutLruCache = LruCache<String, DepthDetectionResult>(4)
+
     suspend fun detectAndExtract(
         sourceBitmap: Bitmap,
-        titleHint: String = "Wallpaper"
+        titleHint: String = "Wallpaper",
+        cacheKey: String? = null
     ): DepthDetectionResult = withContext(Dispatchers.Default) {
+        if (!cacheKey.isNullOrBlank()) {
+            cutoutLruCache.get(cacheKey)?.let { cached ->
+                if (cached.cutoutBitmap == null || !cached.cutoutBitmap.isRecycled) {
+                    return@withContext cached
+                }
+            }
+        }
         val startMs = SystemClock.elapsedRealtime()
         val fullBmp = ensureSoftwareArgb8888(sourceBitmap)
         val fullW = fullBmp.width
@@ -193,7 +204,7 @@ class DepthDetectionEngine {
 
         val label = inferSubjectLabel(geometry.category, titleHint)
 
-        DepthDetectionResult(
+        val result = DepthDetectionResult(
             subjectLabel = label,
             subjectCategory = geometry.category,
             isDepthEligible = true,
@@ -212,6 +223,105 @@ class DepthDetectionEngine {
             recommendedWallpaperPanYFraction = geometry.recommendedWallpaperPanYFraction,
             recommendedClockScale = geometry.recommendedClockScale
         )
+        if (!cacheKey.isNullOrBlank()) {
+            cutoutLruCache.put(cacheKey, result)
+        }
+        result
+    }
+
+    /**
+     * Depth Engine V2 Manual Mask Refinement:
+     * Applies ordered Keep/Erase brush strokes with smooth feathered radial falloff onto the
+     * full-resolution subject cutout while preserving original source RGB pixels inside Keep strokes.
+     */
+    suspend fun applyManualMaskRefinement(
+        sourceBitmap: Bitmap,
+        baseCutout: Bitmap?,
+        strokes: List<MaskBrushStroke>,
+        featherStrength: Float = 0.45f
+    ): Bitmap? = withContext(Dispatchers.Default) {
+        if (strokes.isEmpty()) return@withContext baseCutout
+        val fullBmp = ensureSoftwareArgb8888(sourceBitmap)
+        val w = fullBmp.width
+        val h = fullBmp.height
+        val count = w * h
+        val srcPixels = IntArray(count)
+        fullBmp.getPixels(srcPixels, 0, w, 0, 0, w, h)
+
+        val alpha = FloatArray(count)
+        if (baseCutout != null && !baseCutout.isRecycled && baseCutout.width == w && baseCutout.height == h) {
+            val cutoutPixels = IntArray(count)
+            baseCutout.getPixels(cutoutPixels, 0, w, 0, 0, w, h)
+            for (i in 0 until count) {
+                alpha[i] = ((cutoutPixels[i] ushr 24) and 0xFF) / 255f
+            }
+        }
+
+        val minDim = min(w, h).toFloat().coerceAtLeast(1f)
+        val safeFeather = featherStrength.coerceIn(0.15f, 1.4f)
+
+        for (stroke in strokes) {
+            coroutineContext.ensureActive()
+            val pts = stroke.normalizedPoints
+            if (pts.isEmpty()) continue
+            val radiusPx = (stroke.radiusFraction.coerceIn(0.01f, 0.22f) * minDim).coerceAtLeast(3f)
+            val featherFrac = (stroke.featherFraction * safeFeather).coerceIn(0.05f, 0.90f)
+            val innerRadius = radiusPx * (1f - featherFrac)
+            val falloffSpan = (radiusPx - innerRadius).coerceAtLeast(1f)
+            val isKeep = stroke.mode == MaskBrushMode.KEEP
+
+            fun stampAt(cx: Float, cy: Float) {
+                val x0 = floor(cx - radiusPx).toInt().coerceIn(0, w - 1)
+                val x1 = floor(cx + radiusPx).toInt().coerceIn(0, w - 1)
+                val y0 = floor(cy - radiusPx).toInt().coerceIn(0, h - 1)
+                val y1 = floor(cy + radiusPx).toInt().coerceIn(0, h - 1)
+                val rSq = radiusPx * radiusPx
+                for (y in y0..y1) {
+                    val dy = y - cy
+                    val row = y * w
+                    for (x in x0..x1) {
+                        val dx = x - cx
+                        val dSq = dx * dx + dy * dy
+                        if (dSq > rSq) continue
+                        val dist = sqrt(dSq)
+                        val t = ((radiusPx - dist) / falloffSpan).coerceIn(0f, 1f)
+                        val weight = t * t * (3f - 2f * t)
+                        val idx = row + x
+                        alpha[idx] = if (isKeep) {
+                            max(alpha[idx], weight)
+                        } else {
+                            min(alpha[idx], 1f - weight)
+                        }
+                    }
+                }
+            }
+
+            if (pts.size == 1) {
+                stampAt(pts[0].first * w, pts[0].second * h)
+            } else {
+                for (pIdx in 0 until pts.lastIndex) {
+                    val ax = pts[pIdx].first * w
+                    val ay = pts[pIdx].second * h
+                    val bx = pts[pIdx + 1].first * w
+                    val by = pts[pIdx + 1].second * h
+                    val segLen = hypot(bx - ax, by - ay)
+                    val steps = max(1, (segLen / max(1.5f, radiusPx * 0.28f)).roundToInt())
+                    for (s in 0..steps) {
+                        val f = s.toFloat() / steps.toFloat()
+                        stampAt(ax + (bx - ax) * f, ay + (by - ay) * f)
+                    }
+                }
+            }
+        }
+
+        val outPixels = IntArray(count)
+        for (i in 0 until count) {
+            val aByte = (alpha[i] * 255f).roundToInt().coerceIn(0, 255)
+            outPixels[i] = if (aByte == 0) 0 else (aByte shl 24) or (srcPixels[i] and 0x00FFFFFF)
+        }
+        val refined = createBitmap(w, h)
+        refined.setPixels(outPixels, 0, w, 0, 0, w, h)
+        refined
     }
 
     private fun computeLabSobel(

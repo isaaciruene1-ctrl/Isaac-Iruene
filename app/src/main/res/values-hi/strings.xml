@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Backdrops</string>
+    <string name="widget_small_label">Backdrops क्विक डॉक (3x1)</string>
+    <string name="widget_card_label">Backdrops शोकेस (3x2)</string>
+    <string name="widget_studio_desc">Backdrops डेप्थ स्टूडियो खोलें</string>
+    <string name="widget_apply">लागू करें</string>
+    <string name="widget_favorite">पसंदीदा</string>
+    <string name="widget_favorited">सहेजा गया</string>
+    <string name="nav_home">होम</string>
+    <string name="nav_explore">खोजें</string>
+    <string name="nav_favorites">पसंदीदा</string>
+    <string name="nav_collections">संग्रह</string>
+    <string name="nav_profile">प्रोफ़ाइल</string>
+    <string name="settings_title">स्टूडियो सेटिंग्स</string>
+    <string name="lock_screen_mode_title">लॉक स्क्रीन मोड</string>
+    <string name="onboarding_welcome">Backdrops में आपका स्वागत है</string>
+</resources>

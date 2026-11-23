@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Backdrops</string>
+    <string name="widget_small_label">شريط Backdrops السريع (3x1)</string>
+    <string name="widget_card_label">بطاقة عرض Backdrops (3x2)</string>
+    <string name="widget_studio_desc">فتح استوديو العمق في Backdrops</string>
+    <string name="widget_apply">تطبيق</string>
+    <string name="widget_favorite">مفضلة</string>
+    <string name="widget_favorited">محفوظة</string>
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_explore">استكشاف</string>
+    <string name="nav_favorites">المفضلة</string>
+    <string name="nav_collections">المجموعات</string>
+    <string name="nav_profile">الملف</string>
+    <string name="settings_title">إعدادات الاستوديو</string>
+    <string name="lock_screen_mode_title">وضع شاشة القفل</string>
+    <string name="onboarding_welcome">مرحباً بك في Backdrops</string>
+</resources>

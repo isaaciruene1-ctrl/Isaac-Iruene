@@ -14,7 +14,9 @@ enum class WallpaperCategory(val displayName: String, val tagline: String) {
     MINIMALIST("Minimalist", "Quiet negative space & deliberate restraint"),
     ANIME_ARTISTIC("Anime & Artistic", "Painterly illustrations & atmospheric worlds"),
     CINEMATIC("Cinematic", "Moody film frames & dramatic golden hour"),
-    DEPTH_STUDIO("Depth Studio", "Foreground subjects sculpted for lock-screen clocks")
+    DEPTH_STUDIO("Depth Studio", "Foreground subjects sculpted for lock-screen clocks"),
+    STOCK("Stock", "Original OS-inspired minimalist & geometric drops"),
+    SUPERHERO("Superhero", "Bold heroic emblems, armored light & stylized comics")
 }
 
 enum class DiscoveryCollection(val title: String, val subtitle: String) {
@@ -25,6 +27,8 @@ enum class DiscoveryCollection(val title: String, val subtitle: String) {
     ULTRA_HD_4K("4K Ultra HD", "Razor-sharp 2160 × 3840+ detail"),
     AMOLED("AMOLED", "Deep obsidian contrast for OLED panels"),
     DEPTH_STUDIO("Depth Studio", "Layered subjects built for clock overlap"),
+    STOCK("Stock", "Clean OS-inspired minimal & geometric canvases"),
+    SUPERHERO("Superhero", "Armored emblems, neon capes & cosmic crests"),
     NATURE("Nature", "Organic landscapes & coastal calm"),
     ABSTRACT("Abstract", "Fluid glass, ribbons & soft gradients"),
     ARCHITECTURE("Architecture", "Light, shadow & monumental symmetry"),
@@ -63,6 +67,40 @@ enum class ThemeMode {
 enum class UiStyleMode(val label: String, val subtitle: String) {
     MATERIAL_3("Material 3", "Expressive tonal surfaces & anchored navigation bar"),
     FROSTED_GLASS_OS("Frosted Glass OS", "Translucent tactile panels, specular rims & floating pill dock")
+}
+
+enum class DockLayoutMode(val label: String) {
+    AUTOMATIC("Automatic"),
+    BOTTOM("Bottom"),
+    SIDE("Side")
+}
+
+enum class MaterialNavStyle(val label: String) {
+    PILL_TONAL("Tonal Pill"),
+    COMPACT_BAR("Compact Bar"),
+    FLOATING_CAPSULE("Floating Rail")
+}
+
+enum class AppLanguageOption(
+    val code: String,
+    val nativeLabel: String,
+    val englishLabel: String,
+    val isRtl: Boolean = false
+) {
+    ENGLISH("en", "English", "English", false),
+    SPANISH("es", "Español", "Spanish", false),
+    FRENCH("fr", "Français", "French", false),
+    GERMAN("de", "Deutsch", "German", false),
+    PORTUGUESE("pt", "Português", "Portuguese", false),
+    KOREAN("ko", "한국어", "Korean", false),
+    ARABIC("ar", "العربية", "Arabic (RTL)", true),
+    JAPANESE("ja", "日本語", "Japanese", false),
+    HINDI("hi", "हिन्दी", "Hindi", false);
+
+    companion object {
+        fun fromCode(code: String?): AppLanguageOption =
+            entries.firstOrNull { it.code.equals(code, ignoreCase = true) } ?: ENGLISH
+    }
 }
 
 enum class ImageQualityPref(val label: String, val description: String) {
@@ -146,6 +184,31 @@ data class UserPreferencesDoc(
     val hapticFeedbackEnabled: Boolean = true,
     val reducedMotionEnabled: Boolean = false,
     val glassDepthIntensity: Float = 1.0f,
+    // Backdrop 1.1 Localization, Onboarding & Deep Theme Customization
+    val languageCode: String = AppLanguageOption.ENGLISH.code,
+    val onboardingCompleted: Boolean = false,
+    val dynamicThemingEnabled: Boolean = true,
+    val customAccentHex: Long = 0xFF6B57A8,
+    val m3SurfaceDepth: Float = 1.0f,
+    val m3CornerRadiusScale: Float = 1.0f,
+    val m3ElevationScale: Float = 1.0f,
+    val m3DensityScale: Float = 1.0f,
+    val m3NavStyle: String = MaterialNavStyle.PILL_TONAL.name,
+    val m3TypographyScale: Float = 1.0f,
+    val m3MotionSpeed: Float = 1.0f,
+    val glassBlurLevel: Float = 1.0f,
+    val glassRefractionLevel: Float = 1.0f,
+    val glassTransparencyLevel: Float = 1.0f,
+    val glassLightResponse: Float = 1.0f,
+    val glassSpecularHighlights: Float = 1.0f,
+    val glassBorderSoftness: Float = 1.0f,
+    val glassAdaptiveContrast: Float = 1.0f,
+    val dockLayoutMode: String = DockLayoutMode.AUTOMATIC.name,
+    val useClassicClockHandles: Boolean = false,
+    val weatherCity: String = "",
+    val weatherUseLocation: Boolean = false,
+    val lockScreenOverlayEnabled: Boolean = false,
+    val activeOverlaySetId: String = "",
     val createdAt: Long? = null,
     val updatedAt: Long? = null
 ) {
@@ -157,6 +220,15 @@ data class UserPreferencesDoc(
 
     val parsedUiStyle: UiStyleMode
         get() = runCatching { UiStyleMode.valueOf(uiStyle) }.getOrDefault(UiStyleMode.MATERIAL_3)
+
+    val parsedDockLayoutMode: DockLayoutMode
+        get() = runCatching { DockLayoutMode.valueOf(dockLayoutMode) }.getOrDefault(DockLayoutMode.AUTOMATIC)
+
+    val parsedMaterialNavStyle: MaterialNavStyle
+        get() = runCatching { MaterialNavStyle.valueOf(m3NavStyle) }.getOrDefault(MaterialNavStyle.PILL_TONAL)
+
+    val parsedLanguage: AppLanguageOption
+        get() = AppLanguageOption.fromCode(languageCode)
 }
 
 @Immutable
@@ -169,6 +241,7 @@ data class LockScreenSetDoc(
     val zoomScale: Float = 1.0f,
     val panOffsetX: Float = 0f,
     val panOffsetY: Float = 0f,
+    val rotationDegrees: Float = 0f,
     val dimFraction: Float = 0f,
     val lookFilterName: String = "ORIGINAL",
     val isFavorite: Boolean = false,

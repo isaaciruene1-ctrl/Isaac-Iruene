@@ -84,6 +84,7 @@ class WallpaperMediaService(private val context: Context) {
         .readTimeout(45, TimeUnit.SECONDS)
         .build()
 
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
     fun downloadWallpaper(wallpaper: Wallpaper): Flow<DownloadProgress> = flow {
         emit(DownloadProgress.Starting)
         val sanitizedTitle = wallpaper.title
@@ -96,14 +97,43 @@ class WallpaperMediaService(private val context: Context) {
 
         val bytes = if (wallpaper.isBundledAsset) {
             decodeDrawableToJpeg(wallpaper.fallbackResId)
+        } else if (com.example.data.catalog.ProceduralWallpaperRenderer.isProceduralUrl(wallpaper.fullResUrl)) {
+            val bmp = com.example.data.catalog.ProceduralWallpaperRenderer.renderWallpaper(
+                wallpaper = wallpaper,
+                width = wallpaper.width,
+                height = wallpaper.height
+            )
+            emit(DownloadProgress.InProgress(1f, 1L, 1L))
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            out.toByteArray()
         } else {
-            try {
-                fetchBytesWithProgress(wallpaper.fullResUrl) { progress, read, total ->
-                    emit(DownloadProgress.InProgress(progress, read, total))
+            val cachedBytes = runCatching {
+                BackdropImageLoader.get(context).diskCache?.openSnapshot(wallpaper.fullResUrl)?.use { snap ->
+                    snap.data.toFile().takeIf { it.exists() && it.length() > 1024L }?.readBytes()
                 }
-            } catch (_: Exception) {
-                // Fall back to bundled drawable artwork if offline or remote unreachable
-                decodeDrawableToJpeg(wallpaper.fallbackResId)
+            }.getOrNull()
+
+            if (cachedBytes != null && cachedBytes.isNotEmpty()) {
+                emit(DownloadProgress.InProgress(1f, cachedBytes.size.toLong(), cachedBytes.size.toLong()))
+                cachedBytes
+            } else {
+                try {
+                    fetchBytesResumableWithProgress(wallpaper.id, wallpaper.fullResUrl) { progress, read, total ->
+                        emit(DownloadProgress.InProgress(progress, read, total))
+                    }
+                } catch (_: Exception) {
+                    if (wallpaper.id.startsWith("exp_")) {
+                        val bmp = com.example.data.catalog.ProceduralWallpaperRenderer.renderWallpaper(
+                            wallpaper, wallpaper.width, wallpaper.height
+                        )
+                        val out = ByteArrayOutputStream()
+                        bmp.compress(Bitmap.CompressFormat.JPEG, 94, out)
+                        out.toByteArray()
+                    } else {
+                        decodeDrawableToJpeg(wallpaper.fallbackResId)
+                    }
+                }
             }
         }
 
@@ -260,6 +290,13 @@ class WallpaperMediaService(private val context: Context) {
         if (wallpaper.isBundledAsset) {
             return@withContext BitmapFactory.decodeResource(context.resources, wallpaper.fallbackResId, opts)
         }
+        if (com.example.data.catalog.ProceduralWallpaperRenderer.isProceduralUrl(wallpaper.fullResUrl)) {
+            return@withContext com.example.data.catalog.ProceduralWallpaperRenderer.renderWallpaper(
+                wallpaper = wallpaper,
+                width = wallpaper.width.coerceAtMost(1440),
+                height = wallpaper.height.coerceAtMost(2560)
+            )
+        }
         // Check Coil disk cache first so already-displayed wallpapers load instantly
         try {
             BackdropImageLoader.get(context).diskCache?.openSnapshot(wallpaper.fullResUrl)?.use { snapshot ->
@@ -280,32 +317,65 @@ class WallpaperMediaService(private val context: Context) {
             }
         } catch (_: Exception) {
             null
-        } ?: BitmapFactory.decodeResource(context.resources, wallpaper.fallbackResId, opts)
+        } ?: if (wallpaper.id.startsWith("exp_")) {
+            com.example.data.catalog.ProceduralWallpaperRenderer.renderWallpaper(wallpaper, 1080, 1920)
+        } else {
+            BitmapFactory.decodeResource(context.resources, wallpaper.fallbackResId, opts)
+        }
     }
 
-    private suspend fun fetchBytesWithProgress(
+    /**
+     * Download Manager V2: supports HTTP 206 Partial Content resume via temporary `.part` files
+     * so interrupted large 4K downloads continue cleanly without re-fetching downloaded bytes.
+     */
+    private suspend fun fetchBytesResumableWithProgress(
+        wallpaperId: String,
         url: String,
         onProgress: suspend (Float, Long, Long) -> Unit
     ): ByteArray {
-        val request = Request.Builder().url(url).build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}")
+        val dlDir = File(context.cacheDir, "dl_cache").apply { mkdirs() }
+        val safeKey = wallpaperId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
+        val partFile = File(dlDir, "$safeKey.part")
+        var existingBytes = if (partFile.exists()) partFile.length() else 0L
+
+        val reqBuilder = Request.Builder().url(url)
+        if (existingBytes > 0L) {
+            reqBuilder.header("Range", "bytes=$existingBytes-")
+        }
+
+        client.newCall(reqBuilder.build()).execute().use { response ->
+            if (response.code == 416 && existingBytes > 0L) {
+                partFile.delete()
+                return fetchBytesResumableWithProgress(wallpaperId, url, onProgress)
+            }
+            if (!response.isSuccessful && response.code != 206) {
+                error("HTTP ${response.code}")
+            }
             val body = response.body ?: error("Empty body")
-            val total = body.contentLength()
-            val buffer = ByteArray(8192)
-            val output = ByteArrayOutputStream()
-            var readTotal = 0L
-            body.byteStream().use { input ->
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read == -1) break
-                    output.write(buffer, 0, read)
-                    readTotal += read
-                    val fraction = if (total > 0) (readTotal.toFloat() / total).coerceIn(0f, 1f) else 0.5f
-                    onProgress(fraction, readTotal, total)
+            val isPartialAppend = response.code == 206 && existingBytes > 0L
+            if (!isPartialAppend) {
+                existingBytes = 0L
+            }
+            val remaining = body.contentLength()
+            val total = if (remaining > 0L) existingBytes + remaining else -1L
+            val buffer = ByteArray(16384)
+            var readTotal = existingBytes
+
+            FileOutputStream(partFile, isPartialAppend).use { fileOut ->
+                body.byteStream().use { input ->
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read == -1) break
+                        fileOut.write(buffer, 0, read)
+                        readTotal += read
+                        val fraction = if (total > 0L) (readTotal.toFloat() / total).coerceIn(0f, 1f) else 0.5f
+                        onProgress(fraction, readTotal, total)
+                    }
                 }
             }
-            return output.toByteArray()
+            val resultBytes = partFile.readBytes()
+            partFile.delete()
+            return resultBytes
         }
     }
 

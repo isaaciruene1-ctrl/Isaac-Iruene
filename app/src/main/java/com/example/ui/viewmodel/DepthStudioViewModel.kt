@@ -13,12 +13,19 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.data.media.WallpaperMediaService
+import com.example.data.model.LockScreenSetDoc
 import com.example.data.model.Wallpaper
 import com.example.data.repository.GuestLocalUserStore
+import com.example.data.weather.OpenMeteoWeatherRepository
+import com.example.data.weather.WeatherTelemetryState
+import com.example.engine.depth.ClockHorizontalAlign
 import com.example.engine.depth.DepthDetectionEngine
 import com.example.engine.depth.DepthDetectionResult
+import com.example.engine.depth.MaskBrushStroke
 import com.example.ui.components.ClockDesignConfig
 import com.example.ui.components.ClockSpatialMath
+import com.example.ui.components.ClockWidgetTelemetry
+import com.example.ui.screens.CanvasLookFilter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +34,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class CanvasFramingState(
+    val zoomScale: Float = 1.0f,
+    val panOffsetX: Float = 0f,
+    val panOffsetY: Float = 0f,
+    val rotationDegrees: Float = 0f,
+    val dimFraction: Float = 0f,
+    val lookFilter: CanvasLookFilter = CanvasLookFilter.ORIGINAL
+)
+
+data class StudioHistorySnapshot(
+    val clockConfig: ClockDesignConfig = ClockDesignConfig(),
+    val canvasFraming: CanvasFramingState = CanvasFramingState(),
+    val wallpaperId: String = "",
+    val customPhotoUri: String = "",
+    val maskStrokes: List<MaskBrushStroke> = emptyList(),
+    val maskFeather: Float = 0.45f
+)
 
 sealed interface DepthStudioUiState {
     data object LoadingFullBitmap : DepthStudioUiState
@@ -41,8 +66,9 @@ sealed interface DepthStudioUiState {
 }
 
 /**
- * Dedicated ViewModel isolating Depth Studio bitmap loading, pixel-level DepthDetectionEngine
- * background execution, clock spatial/design configuration, Undo/Redo history, and local persistence.
+ * Dedicated ViewModel managing Depth Studio bitmap extraction, Depth Engine V2 manual mask refinement,
+ * Canvas framing (zoom/pan/rotation/dim/filter), atomic Undo/Redo history across all Studio dimensions,
+ * live Open-Meteo + Battery widget telemetry, and local clock config persistence.
  */
 class DepthStudioViewModel(
     private val mediaService: WallpaperMediaService,
@@ -57,8 +83,32 @@ class DepthStudioViewModel(
     private val _clockConfig = MutableStateFlow(initialSavedClock)
     val clockConfig: StateFlow<ClockDesignConfig> = _clockConfig.asStateFlow()
 
-    private val undoStack = ArrayDeque<ClockDesignConfig>()
-    private val redoStack = ArrayDeque<ClockDesignConfig>()
+    private val _canvasFraming = MutableStateFlow(CanvasFramingState())
+    val canvasFraming: StateFlow<CanvasFramingState> = _canvasFraming.asStateFlow()
+
+    private val _activeWallpaperId = MutableStateFlow("")
+    val activeWallpaperId: StateFlow<String> = _activeWallpaperId.asStateFlow()
+
+    private val _customPhotoUriString = MutableStateFlow("")
+    val customPhotoUriString: StateFlow<String> = _customPhotoUriString.asStateFlow()
+
+    private val _maskStrokes = MutableStateFlow<List<MaskBrushStroke>>(emptyList())
+    val maskStrokes: StateFlow<List<MaskBrushStroke>> = _maskStrokes.asStateFlow()
+
+    private val _maskFeather = MutableStateFlow(0.45f)
+    val maskFeather: StateFlow<Float> = _maskFeather.asStateFlow()
+
+    private val _refinedCutoutBitmap = MutableStateFlow<Bitmap?>(null)
+    val refinedCutoutBitmap: StateFlow<Bitmap?> = _refinedCutoutBitmap.asStateFlow()
+
+    private val _widgetTelemetry = MutableStateFlow(ClockWidgetTelemetry())
+    val widgetTelemetry: StateFlow<ClockWidgetTelemetry> = _widgetTelemetry.asStateFlow()
+
+    private val _weatherState = MutableStateFlow<WeatherTelemetryState>(WeatherTelemetryState.Idle)
+    val weatherState: StateFlow<WeatherTelemetryState> = _weatherState.asStateFlow()
+
+    private val undoStack = ArrayDeque<StudioHistorySnapshot>()
+    private val redoStack = ArrayDeque<StudioHistorySnapshot>()
 
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
@@ -66,7 +116,7 @@ class DepthStudioViewModel(
     private val _canRedo = MutableStateFlow(false)
     val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
 
-    private var activeGestureOrigin: ClockDesignConfig? = null
+    private var activeGestureOrigin: StudioHistorySnapshot? = null
 
     private data class CachedDepthEntry(
         val key: String,
@@ -81,19 +131,29 @@ class DepthStudioViewModel(
     }
 
     private var depthScanJob: Job? = null
+    private var maskRefineJob: Job? = null
     private var currentKey: String? = null
+
+    fun currentSnapshot(): StudioHistorySnapshot = StudioHistorySnapshot(
+        clockConfig = _clockConfig.value,
+        canvasFraming = _canvasFraming.value,
+        wallpaperId = _activeWallpaperId.value,
+        customPhotoUri = _customPhotoUriString.value,
+        maskStrokes = _maskStrokes.value,
+        maskFeather = _maskFeather.value
+    )
 
     fun commitClockConfig(transform: (ClockDesignConfig) -> ClockDesignConfig) {
         val current = _clockConfig.value
         val next = transform(current)
         if (next == current) return
-        pushUndoState(current)
+        pushUndoState(currentSnapshot())
         _clockConfig.value = next
         localStore?.saveClockDesignConfig(next)
     }
 
-    fun beginClockGesture(snapshot: ClockDesignConfig = _clockConfig.value) {
-        activeGestureOrigin = snapshot
+    fun beginClockGesture(@Suppress("UNUSED_PARAMETER") snapshot: ClockDesignConfig = _clockConfig.value) {
+        activeGestureOrigin = currentSnapshot()
     }
 
     fun previewClockConfig(next: ClockDesignConfig) {
@@ -101,31 +161,82 @@ class DepthStudioViewModel(
     }
 
     fun endClockGesture() {
-        val origin = activeGestureOrigin ?: return
-        activeGestureOrigin = null
-        val finalConfig = _clockConfig.value
-        if (finalConfig != origin) {
-            pushUndoState(origin)
-            localStore?.saveClockDesignConfig(finalConfig)
+        endStudioGesture()
+    }
+
+    fun beginStudioGesture() {
+        if (activeGestureOrigin == null) {
+            activeGestureOrigin = currentSnapshot()
         }
     }
 
-    fun undoClockEdit() {
-        if (undoStack.isEmpty()) return
-        val previous = undoStack.removeLast()
-        redoStack.addLast(_clockConfig.value)
-        _clockConfig.value = previous
-        updateHistoryFlags()
-        localStore?.saveClockDesignConfig(previous)
+    fun endStudioGesture() {
+        val origin = activeGestureOrigin ?: return
+        activeGestureOrigin = null
+        val finalSnapshot = currentSnapshot()
+        if (finalSnapshot != origin) {
+            pushUndoState(origin)
+            localStore?.saveClockDesignConfig(finalSnapshot.clockConfig)
+        }
     }
 
-    fun redoClockEdit() {
+    fun previewCanvasFraming(next: CanvasFramingState) {
+        _canvasFraming.value = next.copy(
+            zoomScale = next.zoomScale.coerceIn(1.0f, 2.2f),
+            dimFraction = next.dimFraction.coerceIn(0f, 0.50f)
+        )
+    }
+
+    fun commitCanvasFraming(transform: (CanvasFramingState) -> CanvasFramingState) {
+        val prev = currentSnapshot()
+        val next = transform(prev.canvasFraming).let {
+            it.copy(
+                zoomScale = it.zoomScale.coerceIn(1.0f, 2.2f),
+                dimFraction = it.dimFraction.coerceIn(0f, 0.50f)
+            )
+        }
+        if (next == prev.canvasFraming) return
+        pushUndoState(prev)
+        _canvasFraming.value = next
+    }
+
+    fun resetCanvasFraming() {
+        commitCanvasFraming { CanvasFramingState() }
+    }
+
+    fun undoClockEdit() = undoEdit()
+
+    fun redoClockEdit() = redoEdit()
+
+    fun undoEdit() {
+        if (undoStack.isEmpty()) return
+        val previous = undoStack.removeLast()
+        redoStack.addLast(currentSnapshot())
+        applySnapshotRestored(previous)
+        updateHistoryFlags()
+    }
+
+    fun redoEdit() {
         if (redoStack.isEmpty()) return
         val restored = redoStack.removeLast()
-        undoStack.addLast(_clockConfig.value)
-        _clockConfig.value = restored
+        undoStack.addLast(currentSnapshot())
+        applySnapshotRestored(restored)
         updateHistoryFlags()
-        localStore?.saveClockDesignConfig(restored)
+    }
+
+    private fun applySnapshotRestored(snapshot: StudioHistorySnapshot) {
+        val prevStrokes = _maskStrokes.value
+        val prevFeather = _maskFeather.value
+        _clockConfig.value = snapshot.clockConfig
+        _canvasFraming.value = snapshot.canvasFraming
+        _activeWallpaperId.value = snapshot.wallpaperId
+        _customPhotoUriString.value = snapshot.customPhotoUri
+        _maskStrokes.value = snapshot.maskStrokes
+        _maskFeather.value = snapshot.maskFeather
+        localStore?.saveClockDesignConfig(snapshot.clockConfig)
+        if (prevStrokes != snapshot.maskStrokes || prevFeather != snapshot.maskFeather) {
+            recomputeRefinedCutout()
+        }
     }
 
     fun resetClockProportions() {
@@ -136,21 +247,63 @@ class DepthStudioViewModel(
         commitClockConfig { ClockSpatialMath.centerClock(it) }
     }
 
-    fun autoSnapClockToDepth() {
+    fun autoSnapClockToDepth(viewportWidthPx: Float = 1080f, viewportHeightPx: Float = 2400f) {
         val ready = (_state.value as? DepthStudioUiState.Ready)?.result
         val readyTop = ready?.recommendedClockTopFraction ?: ClockSpatialMath.DEFAULT_PLACEMENT_Y
-        val readyAlign = ready?.recommendedAlign ?: com.example.engine.depth.ClockHorizontalAlign.CENTER
+        val readyAlign = ready?.recommendedAlign ?: ClockHorizontalAlign.CENTER
         val readyScale = ready?.recommendedClockScale ?: 1.0f
-        commitClockConfig {
-            ClockSpatialMath.autoSnapToDepth(it, readyTop, readyAlign).copy(
-                widthScale = readyScale,
-                heightScale = readyScale
-            )
-        }
+        val prev = currentSnapshot()
+
+        val targetZoom = (ready?.recommendedWallpaperZoom ?: 1.0f).coerceIn(1.0f, 1.80f)
+        val vw = viewportWidthPx.coerceAtLeast(1f)
+        val vh = viewportHeightPx.coerceAtLeast(1f)
+        val maxPanX = ((vw * (targetZoom - 1f)) * 0.5f).coerceAtLeast(180f)
+        val maxPanY = ((vh * (targetZoom - 1f)) * 0.5f).coerceAtLeast(220f)
+        val targetPanX = ((ready?.recommendedWallpaperPanXFraction ?: 0f) * vw).coerceIn(-maxPanX, maxPanX)
+        val targetPanY = ((ready?.recommendedWallpaperPanYFraction ?: 0f) * vh).coerceIn(-maxPanY, maxPanY)
+
+        val nextClock = ClockSpatialMath.autoSnapToDepth(_clockConfig.value, readyTop, readyAlign).copy(
+            widthScale = readyScale,
+            heightScale = readyScale
+        )
+        val nextFraming = _canvasFraming.value.copy(
+            zoomScale = targetZoom,
+            panOffsetX = targetPanX,
+            panOffsetY = targetPanY,
+            rotationDegrees = 0f
+        )
+
+        if (nextClock == prev.clockConfig && nextFraming == prev.canvasFraming) return
+        pushUndoState(prev)
+        _clockConfig.value = nextClock
+        _canvasFraming.value = nextFraming
+        localStore?.saveClockDesignConfig(nextClock)
     }
 
     fun restoreClockConfig(restored: ClockDesignConfig) {
         commitClockConfig { restored }
+    }
+
+    fun restoreFromLockScreenSet(setDoc: LockScreenSetDoc) {
+        val restoredClock = ClockDesignConfig.fromJsonString(setDoc.clockConfigJson) ?: _clockConfig.value
+        val restoredFilter = runCatching { CanvasLookFilter.valueOf(setDoc.lookFilterName) }
+            .getOrDefault(CanvasLookFilter.ORIGINAL)
+        _clockConfig.value = restoredClock
+        _canvasFraming.value = CanvasFramingState(
+            zoomScale = setDoc.zoomScale.coerceIn(1f, 2.2f),
+            panOffsetX = setDoc.panOffsetX,
+            panOffsetY = setDoc.panOffsetY,
+            rotationDegrees = setDoc.rotationDegrees,
+            dimFraction = setDoc.dimFraction.coerceIn(0f, 0.50f),
+            lookFilter = restoredFilter
+        )
+        _activeWallpaperId.value = setDoc.wallpaperId
+        _customPhotoUriString.value = setDoc.customPhotoUri
+        _maskStrokes.value = emptyList()
+        undoStack.clear()
+        redoStack.clear()
+        updateHistoryFlags()
+        localStore?.saveClockDesignConfig(restoredClock)
     }
 
     fun resetClockFrameAndCenter() {
@@ -159,7 +312,93 @@ class DepthStudioViewModel(
         }
     }
 
-    private fun pushUndoState(snapshot: ClockDesignConfig) {
+    fun addMaskStroke(stroke: MaskBrushStroke) {
+        if (stroke.normalizedPoints.isEmpty()) return
+        val prev = currentSnapshot()
+        pushUndoState(prev)
+        _maskStrokes.value = prev.maskStrokes + stroke
+        recomputeRefinedCutout()
+    }
+
+    fun clearMaskStrokes() {
+        if (_maskStrokes.value.isEmpty()) return
+        val prev = currentSnapshot()
+        pushUndoState(prev)
+        _maskStrokes.value = emptyList()
+        recomputeRefinedCutout()
+    }
+
+    fun setMaskFeather(feather: Float, commitUndo: Boolean = false) {
+        val clamped = feather.coerceIn(0.15f, 1.3f)
+        if (commitUndo) {
+            val prev = currentSnapshot()
+            if (prev.maskFeather != clamped) {
+                pushUndoState(prev)
+            }
+        }
+        _maskFeather.value = clamped
+        recomputeRefinedCutout()
+    }
+
+    private fun recomputeRefinedCutout() {
+        val ready = _state.value as? DepthStudioUiState.Ready ?: return
+        val strokes = _maskStrokes.value
+        val feather = _maskFeather.value
+        if (strokes.isEmpty()) {
+            maskRefineJob?.cancel()
+            _refinedCutoutBitmap.value = ready.result.cutoutBitmap
+            return
+        }
+        maskRefineJob?.cancel()
+        maskRefineJob = viewModelScope.launch {
+            val refined = depthEngine.applyManualMaskRefinement(
+                sourceBitmap = ready.fullBitmap,
+                baseCutout = ready.result.cutoutBitmap,
+                strokes = strokes,
+                featherStrength = feather
+            )
+            _refinedCutoutBitmap.value = refined ?: ready.result.cutoutBitmap
+        }
+    }
+
+    fun refreshTelemetry(context: Context, weatherCity: String, useLocation: Boolean) {
+        val batteryPct = OpenMeteoWeatherRepository.readBatteryPercent(context)
+        _widgetTelemetry.value = _widgetTelemetry.value.copy(batteryPercent = batteryPct)
+        viewModelScope.launch {
+            val weather = when {
+                weatherCity.isNotBlank() -> OpenMeteoWeatherRepository.refreshByCity(weatherCity)
+                useLocation -> OpenMeteoWeatherRepository.refreshByDeviceCoarseLocation(context)
+                else -> OpenMeteoWeatherRepository.state.value
+            }
+            _weatherState.value = weather
+            when (weather) {
+                is WeatherTelemetryState.Ready -> {
+                    _widgetTelemetry.value = ClockWidgetTelemetry(
+                        weatherText = weather.compactReadout,
+                        batteryPercent = OpenMeteoWeatherRepository.readBatteryPercent(context),
+                        isWeatherAvailable = true
+                    )
+                }
+                is WeatherTelemetryState.PermissionDenied -> {
+                    _widgetTelemetry.value = ClockWidgetTelemetry(
+                        weatherText = "ENABLE LOCATION OR CITY",
+                        batteryPercent = batteryPct,
+                        isWeatherAvailable = false
+                    )
+                }
+                is WeatherTelemetryState.Unavailable -> {
+                    _widgetTelemetry.value = ClockWidgetTelemetry(
+                        weatherText = "WEATHER OFFLINE",
+                        batteryPercent = batteryPct,
+                        isWeatherAvailable = false
+                    )
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun pushUndoState(snapshot: StudioHistorySnapshot) {
         if (undoStack.size >= MAX_HISTORY_STEPS) {
             undoStack.removeFirst()
         }
@@ -175,9 +414,17 @@ class DepthStudioViewModel(
 
     fun loadWallpaperForDepthStudio(wallpaper: Wallpaper, forceRescan: Boolean = false) {
         val key = wallpaper.id
+        if (_activeWallpaperId.value != key || _customPhotoUriString.value.isNotEmpty()) {
+            _activeWallpaperId.value = key
+            _customPhotoUriString.value = ""
+            if (!forceRescan) {
+                _maskStrokes.value = emptyList()
+            }
+        }
         if (!forceRescan) {
             depthCache[key]?.let { cached ->
                 currentKey = key
+                _refinedCutoutBitmap.value = cached.result.cutoutBitmap
                 _state.value = DepthStudioUiState.Ready(
                     key = key,
                     fullBitmap = cached.fullBitmap,
@@ -200,15 +447,22 @@ class DepthStudioViewModel(
                 )
                 return@launch
             }
-            runDepthScan(key = key, fullBmp = fullBmp, titleHint = wallpaper.category.displayName, saveToCache = true)
+            runDepthScan(key = key, fullBmp = fullBmp, titleHint = wallpaper.category.displayName, saveToCache = true, forceRescan = forceRescan)
         }
     }
 
     fun loadCustomPhotoForDepthStudio(context: Context, uri: Uri, forceRescan: Boolean = false) {
         val key = "uri_$uri"
+        if (_customPhotoUriString.value != uri.toString()) {
+            _customPhotoUriString.value = uri.toString()
+            if (!forceRescan) {
+                _maskStrokes.value = emptyList()
+            }
+        }
         if (!forceRescan) {
             depthCache[key]?.let { cached ->
                 currentKey = key
+                _refinedCutoutBitmap.value = cached.result.cutoutBitmap
                 _state.value = DepthStudioUiState.Ready(
                     key = key,
                     fullBitmap = cached.fullBitmap,
@@ -229,7 +483,7 @@ class DepthStudioViewModel(
                 _state.value = DepthStudioUiState.BitmapError("Could not load selected photo.")
                 return@launch
             }
-            runDepthScan(key = key, fullBmp = bmp, titleHint = "Custom Photo", saveToCache = true)
+            runDepthScan(key = key, fullBmp = bmp, titleHint = "Custom Photo", saveToCache = true, forceRescan = forceRescan)
         }
     }
 
@@ -237,16 +491,31 @@ class DepthStudioViewModel(
         key: String,
         fullBmp: Bitmap,
         titleHint: String,
-        saveToCache: Boolean
+        saveToCache: Boolean,
+        forceRescan: Boolean = false
     ) {
         _state.value = DepthStudioUiState.ScanningSubject(
             fullBitmap = fullBmp,
             subjectHint = titleHint
         )
         try {
-            val detection = depthEngine.detectAndExtract(fullBmp, titleHint)
+            val detection = depthEngine.detectAndExtract(
+                sourceBitmap = fullBmp,
+                titleHint = titleHint,
+                cacheKey = if (forceRescan) null else key
+            )
             if (saveToCache) {
                 depthCache[key] = CachedDepthEntry(key, fullBmp, detection)
+            }
+            _refinedCutoutBitmap.value = if (_maskStrokes.value.isNotEmpty()) {
+                depthEngine.applyManualMaskRefinement(
+                    sourceBitmap = fullBmp,
+                    baseCutout = detection.cutoutBitmap,
+                    strokes = _maskStrokes.value,
+                    featherStrength = _maskFeather.value
+                ) ?: detection.cutoutBitmap
+            } else {
+                detection.cutoutBitmap
             }
             _state.value = DepthStudioUiState.Ready(
                 key = key,
@@ -286,8 +555,8 @@ class DepthStudioViewModel(
 
     companion object {
         private const val TAG = "DepthStudioVM"
-        private const val MAX_CACHE_ENTRIES = 2
-        private const val MAX_HISTORY_STEPS = 40
+        private const val MAX_CACHE_ENTRIES = 3
+        private const val MAX_HISTORY_STEPS = 48
 
         fun provideFactory(context: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {

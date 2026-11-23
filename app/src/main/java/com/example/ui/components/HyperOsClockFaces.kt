@@ -80,6 +80,12 @@ internal fun RenderHyperOsClockFace(
     widthScale: Float,
     opacity: Float,
     showDateAndWeather: Boolean,
+    widgetsEnabled: Boolean = true,
+    showDateWidget: Boolean = true,
+    showWeatherWidget: Boolean = true,
+    showBatteryWidget: Boolean = false,
+    showDecorativeWidget: Boolean = true,
+    telemetry: ClockWidgetTelemetry = ClockWidgetTelemetry(),
     signatureMode: ClockSignatureMode = ClockSignatureMode.DATE_WEATHER,
     signatureText: String,
     colAlignment: Alignment.Horizontal,
@@ -99,6 +105,12 @@ internal fun RenderHyperOsClockFace(
             scale = scale,
             opacity = opacity,
             showDateAndWeather = showDateAndWeather,
+            widgetsEnabled = widgetsEnabled,
+            showDateWidget = showDateWidget,
+            showWeatherWidget = showWeatherWidget,
+            showBatteryWidget = showBatteryWidget,
+            showDecorativeWidget = showDecorativeWidget,
+            telemetry = telemetry,
             signatureMode = signatureMode,
             signatureText = signatureText,
             colAlignment = colAlignment,
@@ -121,6 +133,12 @@ private fun RenderHyperOsClockFaceBody(
     scale: Float,
     opacity: Float,
     showDateAndWeather: Boolean,
+    widgetsEnabled: Boolean,
+    showDateWidget: Boolean,
+    showWeatherWidget: Boolean,
+    showBatteryWidget: Boolean,
+    showDecorativeWidget: Boolean,
+    telemetry: ClockWidgetTelemetry,
     signatureMode: ClockSignatureMode,
     signatureText: String,
     colAlignment: Alignment.Horizontal,
@@ -141,18 +159,24 @@ private fun RenderHyperOsClockFaceBody(
 
     when (face) {
         HyperOsClockFace.CLASSIC_HORIZON -> {
-            if (showMeta) {
+            if (showMeta || signatureText.isNotBlank()) {
                 ClockSignatureMetadataStrip(
                     parts = parts,
                     signatureMode = signatureMode,
                     signatureText = signatureText,
-                    showDateAndWeather = true,
+                    showDateAndWeather = showMeta,
                     primaryColor = primaryColor,
                     secondaryColor = secondaryColor,
                     scale = scale,
                     shadow = shadow,
                     renderAsGlyphMask = renderAsGlyphMask,
-                    fontFamily = OutfitFontFamily
+                    fontFamily = OutfitFontFamily,
+                    widgetsEnabled = widgetsEnabled,
+                    showDateWidget = showDateWidget,
+                    showWeatherWidget = showWeatherWidget,
+                    showBatteryWidget = showBatteryWidget,
+                    showDecorativeWidget = showDecorativeWidget,
+                    telemetry = telemetry
                 )
                 Spacer(modifier = Modifier.height(3.dp))
             }
@@ -200,20 +224,6 @@ private fun RenderHyperOsClockFaceBody(
                     textAlign = textAlign
                 )
             }
-            if (signatureText.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = signatureText,
-                    fontFamily = PlusJakartaSansFontFamily,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = (12f * scale).sp,
-                    letterSpacing = 0.8.sp,
-                    color = primaryColor.copy(alpha = 0.86f),
-                    style = TextStyle(shadow = shadow),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
 
         HyperOsClockFace.CLASSIC_UTILITY -> {
@@ -221,21 +231,25 @@ private fun RenderHyperOsClockFaceBody(
                 horizontalAlignment = colAlignment,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (showMeta) {
-                    ClockSignatureMetadataStrip(
-                        parts = parts,
-                        signatureMode = signatureMode,
-                        signatureText = signatureText,
-                        showDateAndWeather = true,
-                        primaryColor = primaryColor,
-                        secondaryColor = secondaryColor,
-                        scale = scale,
-                        shadow = shadow,
-                        renderAsGlyphMask = renderAsGlyphMask,
-                        fontFamily = PlusJakartaSansFontFamily,
-                        isCapsuleStyled = true
-                    )
-                }
+                ClockSignatureMetadataStrip(
+                    parts = parts,
+                    signatureMode = signatureMode,
+                    signatureText = "",
+                    showDateAndWeather = showMeta,
+                    primaryColor = primaryColor,
+                    secondaryColor = secondaryColor,
+                    scale = scale,
+                    shadow = shadow,
+                    renderAsGlyphMask = renderAsGlyphMask,
+                    fontFamily = PlusJakartaSansFontFamily,
+                    isCapsuleStyled = true,
+                    widgetsEnabled = widgetsEnabled,
+                    showDateWidget = showDateWidget,
+                    showWeatherWidget = showWeatherWidget,
+                    showBatteryWidget = showBatteryWidget,
+                    showDecorativeWidget = showDecorativeWidget,
+                    telemetry = telemetry
+                )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(colonGapDp)
@@ -321,7 +335,18 @@ private fun RenderHyperOsClockFaceBody(
                     val metaRight = when (signatureMode) {
                         ClockSignatureMode.WEEKDAY_SECONDS -> ":${parts.seconds}"
                         ClockSignatureMode.MINIMAL_DATE -> parts.amPmLabel.ifEmpty { "24H" }
-                        else -> if (parts.amPmLabel.isEmpty()) "21°" else "21° ${parts.amPmLabel}"
+                        else -> buildString {
+                            if (widgetsEnabled && showWeatherWidget) append(telemetry.weatherText)
+                            if (widgetsEnabled && showBatteryWidget) {
+                                if (isNotEmpty()) append(" • ")
+                                append("${telemetry.batteryPercent}%")
+                            }
+                            if (parts.amPmLabel.isNotEmpty()) {
+                                if (isNotEmpty()) append(" ")
+                                append(parts.amPmLabel)
+                            }
+                            if (isEmpty()) append("24H")
+                        }
                     }
                     Text(
                         text = metaRight,
@@ -374,18 +399,24 @@ private fun RenderHyperOsClockFaceBody(
         }
 
         HyperOsClockFace.POSTER_SPLIT -> {
-            if (showMeta) {
+            if (showMeta || signatureText.isNotBlank()) {
                 ClockSignatureMetadataStrip(
                     parts = parts,
                     signatureMode = signatureMode,
                     signatureText = signatureText,
-                    showDateAndWeather = true,
+                    showDateAndWeather = showMeta,
                     primaryColor = primaryColor,
                     secondaryColor = secondaryColor,
                     scale = scale,
                     shadow = shadow,
                     renderAsGlyphMask = renderAsGlyphMask,
-                    fontFamily = SpaceGroteskFontFamily
+                    fontFamily = SpaceGroteskFontFamily,
+                    widgetsEnabled = widgetsEnabled,
+                    showDateWidget = showDateWidget,
+                    showWeatherWidget = showWeatherWidget,
+                    showBatteryWidget = showBatteryWidget,
+                    showDecorativeWidget = showDecorativeWidget,
+                    telemetry = telemetry
                 )
                 Spacer(modifier = Modifier.height(2.dp))
             }
@@ -442,23 +473,35 @@ private fun RenderHyperOsClockFaceBody(
         }
 
         HyperOsClockFace.ATELIER_SERIF -> {
-            if (showMeta) {
-                val atelierLabel = when {
-                    signatureText.isNotBlank() -> signatureText
-                    signatureMode == ClockSignatureMode.WEEKDAY_SECONDS -> "${parts.dateLabel}  :${parts.seconds}"
+            if (showMeta || signatureText.isNotBlank()) {
+                val atelierLabel = when (signatureMode) {
+                    ClockSignatureMode.WEEKDAY_SECONDS -> "${parts.dateLabel}  :${parts.seconds}"
                     else -> parts.dateLabel.lowercase(Locale.getDefault())
                         .replaceFirstChar { it.titlecase(Locale.getDefault()) }
                 }
-                Text(
-                    text = atelierLabel,
-                    fontFamily = CormorantFontFamily,
-                    fontStyle = FontStyle.Italic,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = (19f * scale).sp,
-                    letterSpacing = 1.2.sp,
-                    color = if (renderAsGlyphMask) Color.White else primaryColor.copy(alpha = 0.94f),
-                    style = TextStyle(shadow = shadow)
-                )
+                if (showMeta && showDateWidget) {
+                    Text(
+                        text = atelierLabel,
+                        fontFamily = CormorantFontFamily,
+                        fontStyle = FontStyle.Italic,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = (19f * scale).sp,
+                        letterSpacing = 1.2.sp,
+                        color = if (renderAsGlyphMask) Color.White else primaryColor.copy(alpha = 0.94f),
+                        style = TextStyle(shadow = shadow)
+                    )
+                }
+                if (signatureText.isNotBlank()) {
+                    Text(
+                        text = signatureText,
+                        fontFamily = SpaceGroteskFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = (11f * scale).sp,
+                        letterSpacing = 1.4.sp,
+                        color = if (renderAsGlyphMask) Color.White else secondaryColor.copy(alpha = 0.94f),
+                        style = TextStyle(shadow = shadow)
+                    )
+                }
                 Spacer(modifier = Modifier.height(2.dp))
             }
             Row(
@@ -519,7 +562,8 @@ private fun RenderHyperOsClockFaceBody(
         HyperOsClockFace.DOODLE_PLAY -> {
             if (showMeta) {
                 Surface(
-                    color = if (renderAsGlyphMask) Color.Transparent else secondaryColor.copy(alpha = 0.24f),
+                    color = if (renderAsGlyphMask) Color.Transparent else secondaryColor.copy(alpha = 0.22f),
+                    shadowElevation = 0.dp,
                     shape = RoundedCornerShape(50),
                     modifier = Modifier
                         .rotate(-3f)
@@ -530,17 +574,25 @@ private fun RenderHyperOsClockFaceBody(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.AutoAwesome,
-                            contentDescription = null,
-                            tint = if (renderAsGlyphMask) Color.White else secondaryColor,
-                            modifier = Modifier.size((13f * scale).dp)
-                        )
+                        if (showDecorativeWidget) {
+                            Icon(
+                                imageVector = Icons.Rounded.AutoAwesome,
+                                contentDescription = null,
+                                tint = if (renderAsGlyphMask) Color.White else secondaryColor,
+                                modifier = Modifier.size((13f * scale).dp)
+                            )
+                        }
                         Text(
-                            text = signatureText.ifBlank {
-                                if (signatureMode == ClockSignatureMode.WEEKDAY_SECONDS) "${parts.dateLabel} • :${parts.seconds}"
-                                else parts.dateLabel
-                            },
+                            text = buildString {
+                                if (showDateWidget) append(parts.dateLabel)
+                                if (signatureMode == ClockSignatureMode.WEEKDAY_SECONDS) {
+                                    if (isNotEmpty()) append(" • ")
+                                    append(":${parts.seconds}")
+                                } else if (widgetsEnabled && showWeatherWidget && signatureMode == ClockSignatureMode.DATE_WEATHER) {
+                                    if (isNotEmpty()) append(" • ")
+                                    append(telemetry.weatherText)
+                                }
+                            }.ifBlank { parts.dateLabel },
                             fontFamily = FredokaFontFamily,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = (12f * scale).sp,
@@ -550,6 +602,16 @@ private fun RenderHyperOsClockFaceBody(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
+            }
+            if (signatureText.isNotBlank()) {
+                Text(
+                    text = signatureText,
+                    fontFamily = FredokaFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = (11f * scale).sp,
+                    color = if (renderAsGlyphMask) Color.White else secondaryColor,
+                    style = TextStyle(shadow = shadow)
+                )
             }
             Box(contentAlignment = Alignment.Center) {
                 Canvas(modifier = Modifier.size(width = (220f * scale).dp, height = (130f * scale).dp)) {
@@ -671,17 +733,24 @@ private fun RenderHyperOsClockFaceBody(
                         }
                     }
                 }
-                if (showMeta) {
-                    Text(
-                        text = signatureText.ifBlank {
-                            if (signatureMode == ClockSignatureMode.WEEKDAY_SECONDS) "${parts.dateLabel}  ★  :${parts.seconds}"
-                            else "${parts.dateLabel}  ★  21°"
-                        },
+                if (showMeta || signatureText.isNotBlank()) {
+                    ClockSignatureMetadataStrip(
+                        parts = parts,
+                        signatureMode = signatureMode,
+                        signatureText = signatureText,
+                        showDateAndWeather = showMeta,
+                        primaryColor = primaryColor,
+                        secondaryColor = secondaryColor,
+                        scale = scale,
+                        shadow = shadow,
+                        renderAsGlyphMask = renderAsGlyphMask,
                         fontFamily = ShantellSansFontFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = (13f * scale).sp,
-                        color = if (renderAsGlyphMask) Color.White else primaryColor.copy(alpha = 0.92f),
-                        style = TextStyle(shadow = shadow)
+                        widgetsEnabled = widgetsEnabled,
+                        showDateWidget = showDateWidget,
+                        showWeatherWidget = showWeatherWidget,
+                        showBatteryWidget = showBatteryWidget,
+                        showDecorativeWidget = showDecorativeWidget,
+                        telemetry = telemetry
                     )
                 }
             }
@@ -761,24 +830,26 @@ private fun RenderHyperOsClockFaceBody(
                     )
                     drawCircle(color = secondaryColor, radius = 5.dp.toPx(), center = center)
                 }
-                if (showMeta) {
-                    Surface(
-                        color = if (renderAsGlyphMask) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.82f),
-                        shape = RoundedCornerShape(50),
-                        border = if (renderAsGlyphMask) androidx.compose.foundation.BorderStroke(1.5.dp, Color.White) else null
-                    ) {
-                        Text(
-                            text = signatureText.ifBlank {
-                                if (signatureMode == ClockSignatureMode.WEEKDAY_SECONDS) "${parts.dateLabel} • :${parts.seconds}"
-                                else "${parts.dateLabel} • 21°"
-                            },
-                            fontFamily = fontFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = (11f * scale).sp,
-                            color = if (renderAsGlyphMask) Color.White else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
+                if (showMeta || signatureText.isNotBlank()) {
+                    ClockSignatureMetadataStrip(
+                        parts = parts,
+                        signatureMode = signatureMode,
+                        signatureText = signatureText,
+                        showDateAndWeather = showMeta,
+                        primaryColor = primaryColor,
+                        secondaryColor = secondaryColor,
+                        scale = scale,
+                        shadow = shadow,
+                        renderAsGlyphMask = renderAsGlyphMask,
+                        fontFamily = fontFamily,
+                        isCapsuleStyled = true,
+                        widgetsEnabled = widgetsEnabled,
+                        showDateWidget = showDateWidget,
+                        showWeatherWidget = showWeatherWidget,
+                        showBatteryWidget = showBatteryWidget,
+                        showDecorativeWidget = showDecorativeWidget,
+                        telemetry = telemetry
+                    )
                 }
             }
         }
@@ -868,19 +939,25 @@ private fun RenderHyperOsClockFaceBody(
         }
 
         HyperOsClockFace.KINETIC_MONO -> {
-            if (showMeta) {
+            if (showMeta || signatureText.isNotBlank()) {
                 ClockSignatureMetadataStrip(
                     parts = parts,
                     signatureMode = signatureMode,
                     signatureText = signatureText,
-                    showDateAndWeather = true,
+                    showDateAndWeather = showMeta,
                     primaryColor = primaryColor,
                     secondaryColor = secondaryColor,
                     scale = scale,
                     shadow = shadow,
                     renderAsGlyphMask = renderAsGlyphMask,
                     fontFamily = JetBrainsMonoFontFamily,
-                    isCapsuleStyled = true
+                    isCapsuleStyled = true,
+                    widgetsEnabled = widgetsEnabled,
+                    showDateWidget = showDateWidget,
+                    showWeatherWidget = showWeatherWidget,
+                    showBatteryWidget = showBatteryWidget,
+                    showDecorativeWidget = showDecorativeWidget,
+                    telemetry = telemetry
                 )
                 Spacer(modifier = Modifier.height(6.dp))
             }
@@ -981,34 +1058,25 @@ private fun RenderHyperOsClockFaceBody(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                if (showMeta) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size((10f * scale).dp)) {
-                            val d = Path().apply {
-                                moveTo(size.width * 0.5f, 0f)
-                                lineTo(size.width, size.height * 0.5f)
-                                lineTo(size.width * 0.5f, size.height)
-                                lineTo(0f, size.height * 0.5f)
-                                close()
-                            }
-                            drawPath(d, color = if (renderAsGlyphMask) Color.White else secondaryColor)
-                        }
-                        Text(
-                            text = signatureText.ifBlank {
-                                if (signatureMode == ClockSignatureMode.WEEKDAY_SECONDS) "${parts.dateLabel}  •  :${parts.seconds}"
-                                else "${parts.dateLabel}  •  21°"
-                            },
-                            fontFamily = SyneFontFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = (11.5f * scale).sp,
-                            letterSpacing = 1.6.sp,
-                            color = if (renderAsGlyphMask) Color.White else primaryColor.copy(alpha = 0.92f),
-                            style = TextStyle(shadow = shadow)
-                        )
-                    }
+                if (showMeta || signatureText.isNotBlank()) {
+                    ClockSignatureMetadataStrip(
+                        parts = parts,
+                        signatureMode = signatureMode,
+                        signatureText = signatureText,
+                        showDateAndWeather = showMeta,
+                        primaryColor = primaryColor,
+                        secondaryColor = secondaryColor,
+                        scale = scale,
+                        shadow = shadow,
+                        renderAsGlyphMask = renderAsGlyphMask,
+                        fontFamily = SyneFontFamily,
+                        widgetsEnabled = widgetsEnabled,
+                        showDateWidget = showDateWidget,
+                        showWeatherWidget = showWeatherWidget,
+                        showBatteryWidget = showBatteryWidget,
+                        showDecorativeWidget = showDecorativeWidget,
+                        telemetry = telemetry
+                    )
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1128,7 +1196,12 @@ private fun RenderHyperOsClockFaceBody(
                                 color = Color.White
                             )
                             Text(
-                                text = if (signatureMode == ClockSignatureMode.WEEKDAY_SECONDS) ":${parts.seconds}" else "21°",
+                                text = when {
+                                    signatureMode == ClockSignatureMode.WEEKDAY_SECONDS -> ":${parts.seconds}"
+                                    widgetsEnabled && showWeatherWidget -> telemetry.weatherText.substringBefore(" ")
+                                    widgetsEnabled && showBatteryWidget -> "${telemetry.batteryPercent}%"
+                                    else -> parts.amPmLabel.ifEmpty { "24H" }
+                                },
                                 fontFamily = JetBrainsMonoFontFamily,
                                 fontSize = (10f * scale).sp,
                                 color = Color.White.copy(alpha = 0.90f)
@@ -1152,6 +1225,12 @@ private fun RenderHyperOsClockFaceBody(
                 scale = scale,
                 opacity = opacity,
                 showDateAndWeather = showDateAndWeather,
+                widgetsEnabled = widgetsEnabled,
+                showDateWidget = showDateWidget,
+                showWeatherWidget = showWeatherWidget,
+                showBatteryWidget = showBatteryWidget,
+                showDecorativeWidget = showDecorativeWidget,
+                telemetry = telemetry,
                 signatureMode = signatureMode,
                 signatureText = signatureText,
                 colAlignment = colAlignment,
@@ -1186,91 +1265,170 @@ internal fun StyledClockText(
             blurRadius = 18f
         )
     }
-    when (finish) {
-        HyperOsClockFinish.SOLID -> {
+
+    // Optical weight contour synthesis: guarantees visible weight progression (100..900)
+    // across both variable fonts and single-weight bundled .ttf display faces.
+    val clampedWeight = weightLevel.coerceIn(100, 900)
+    val heavyFraction = ((clampedWeight - 520).coerceAtLeast(0) / 380f).coerceIn(0f, 1f)
+    val lightAlphaScale = if (clampedWeight < 380) (0.78f + (clampedWeight - 100) / 280f * 0.22f) else 1f
+    val dilationStrokeWidth = if (heavyFraction > 0.02f) {
+        (1.0f + heavyFraction * 8.6f) * (fontSize.value / 96f).coerceIn(0.45f, 1.45f)
+    } else 0f
+
+    @Composable
+    fun LayeredOpticalText(baseStyle: TextStyle, strokeBrush: Brush? = null, strokeColor: Color = primaryColor) {
+        Box(contentAlignment = Alignment.Center) {
+            if (dilationStrokeWidth > 0.05f && finish != HyperOsClockFinish.OUTLINE) {
+                val strokeDraw = Stroke(
+                    width = dilationStrokeWidth,
+                    join = StrokeJoin.Round,
+                    cap = StrokeCap.Round
+                )
+                val strokeStyle = if (isMask || strokeBrush == null) {
+                    TextStyle(
+                        fontFamily = baseStyle.fontFamily,
+                        fontWeight = baseStyle.fontWeight,
+                        fontSize = baseStyle.fontSize,
+                        lineHeight = baseStyle.lineHeight,
+                        letterSpacing = baseStyle.letterSpacing,
+                        color = if (isMask) Color.White else strokeColor,
+                        drawStyle = strokeDraw
+                    )
+                } else {
+                    TextStyle(
+                        fontFamily = baseStyle.fontFamily,
+                        fontWeight = baseStyle.fontWeight,
+                        fontSize = baseStyle.fontSize,
+                        lineHeight = baseStyle.lineHeight,
+                        letterSpacing = baseStyle.letterSpacing,
+                        brush = strokeBrush,
+                        drawStyle = strokeDraw
+                    )
+                }
+                Text(
+                    text = text,
+                    textAlign = textAlign,
+                    style = strokeStyle
+                )
+            }
             Text(
                 text = text,
                 textAlign = textAlign,
-                style = TextStyle(
+                style = baseStyle
+            )
+        }
+    }
+
+    when (finish) {
+        HyperOsClockFinish.SOLID -> {
+            val fillColor = if (isMask) Color.White else primaryColor.copy(alpha = primaryColor.alpha * lightAlphaScale)
+            LayeredOpticalText(
+                baseStyle = TextStyle(
                     fontFamily = fontFamily,
                     fontWeight = fontWeight,
                     fontSize = fontSize,
                     lineHeight = lineHeight,
                     letterSpacing = letterSpacing,
-                    color = primaryColor,
+                    color = fillColor,
                     shadow = ambientShadow
-                )
+                ),
+                strokeColor = fillColor
             )
         }
 
         HyperOsClockFinish.TRANSLUCENT -> {
-            Text(
-                text = text,
-                textAlign = textAlign,
-                style = TextStyle(
+            val fillColor = if (isMask) Color.White else primaryColor.copy(alpha = 0.56f * lightAlphaScale)
+            LayeredOpticalText(
+                baseStyle = TextStyle(
                     fontFamily = fontFamily,
                     fontWeight = fontWeight,
                     fontSize = fontSize,
                     lineHeight = lineHeight,
                     letterSpacing = letterSpacing,
-                    color = primaryColor.copy(alpha = 0.56f),
-                    shadow = Shadow(
+                    color = fillColor,
+                    shadow = if (isMask) null else Shadow(
                         color = secondaryColor.copy(alpha = 0.35f),
                         offset = Offset(0f, 3f),
                         blurRadius = 14f
                     )
-                )
+                ),
+                strokeColor = fillColor
             )
         }
 
         HyperOsClockFinish.BLEND -> {
-            Text(
-                text = text,
-                textAlign = textAlign,
-                style = TextStyle(
-                    fontFamily = fontFamily,
-                    fontWeight = fontWeight,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    letterSpacing = letterSpacing,
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = 0.96f),
-                            secondaryColor.copy(alpha = 0.90f),
-                            primaryColor.copy(alpha = 0.84f)
-                        )
-                    ),
-                    shadow = ambientShadow
+            val blendBrush = Brush.linearGradient(
+                colors = listOf(
+                    primaryColor.copy(alpha = 0.96f * lightAlphaScale),
+                    secondaryColor.copy(alpha = 0.90f * lightAlphaScale),
+                    primaryColor.copy(alpha = 0.84f * lightAlphaScale)
                 )
+            )
+            LayeredOpticalText(
+                baseStyle = if (isMask) {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        color = Color.White,
+                        shadow = ambientShadow
+                    )
+                } else {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        brush = blendBrush,
+                        shadow = ambientShadow
+                    )
+                },
+                strokeBrush = blendBrush
             )
         }
 
         HyperOsClockFinish.OUTLINE -> {
-            val strokePx = ((weightLevel / 100f) * 1.1f).coerceIn(2.4f, 9.5f)
+            val strokePx = (1.6f + ((clampedWeight - 100) / 800f) * 9.8f).coerceIn(1.6f, 11.4f)
+            val outlineDraw = Stroke(
+                width = strokePx,
+                join = StrokeJoin.Round,
+                cap = StrokeCap.Round
+            )
             Text(
                 text = text,
                 textAlign = textAlign,
-                style = TextStyle(
-                    fontFamily = fontFamily,
-                    fontWeight = fontWeight,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    letterSpacing = letterSpacing,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(primaryColor, secondaryColor)
-                    ),
-                    drawStyle = Stroke(
-                        width = strokePx,
-                        join = StrokeJoin.Round,
-                        cap = StrokeCap.Round
-                    ),
-                    shadow = ambientShadow
-                )
+                style = if (isMask) {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        color = Color.White,
+                        drawStyle = outlineDraw,
+                        shadow = ambientShadow
+                    )
+                } else {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(primaryColor, secondaryColor)
+                        ),
+                        drawStyle = outlineDraw,
+                        shadow = ambientShadow
+                    )
+                }
             )
         }
 
         HyperOsClockFinish.STRIPED -> {
-            // Diagonal zebra stripe shader clipped strictly inside the glyph geometry
             val stripeBrush = Brush.linearGradient(
                 colorStops = arrayOf(
                     0.00f to primaryColor,
@@ -1284,44 +1442,68 @@ internal fun StyledClockText(
                 end = Offset(18f, 18f),
                 tileMode = TileMode.Repeated
             )
-            Text(
-                text = text,
-                textAlign = textAlign,
-                style = TextStyle(
-                    fontFamily = fontFamily,
-                    fontWeight = fontWeight,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    letterSpacing = letterSpacing,
-                    brush = stripeBrush,
-                    shadow = ambientShadow
-                )
+            LayeredOpticalText(
+                baseStyle = if (isMask) {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        color = Color.White,
+                        shadow = ambientShadow
+                    )
+                } else {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        brush = stripeBrush,
+                        shadow = ambientShadow
+                    )
+                },
+                strokeBrush = stripeBrush
             )
         }
 
         HyperOsClockFinish.BLUR_GLASS -> {
-            Text(
-                text = text,
-                textAlign = textAlign,
-                style = TextStyle(
-                    fontFamily = fontFamily,
-                    fontWeight = fontWeight,
-                    fontSize = fontSize,
-                    lineHeight = lineHeight,
-                    letterSpacing = letterSpacing,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.96f),
-                            primaryColor.copy(alpha = 0.80f),
-                            secondaryColor.copy(alpha = 0.72f)
-                        )
-                    ),
-                    shadow = Shadow(
-                        color = Color.Black.copy(alpha = 0.34f),
-                        offset = Offset(0f, 4f),
-                        blurRadius = 14f
-                    )
+            val glassBrush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.96f * lightAlphaScale),
+                    primaryColor.copy(alpha = 0.80f * lightAlphaScale),
+                    secondaryColor.copy(alpha = 0.72f * lightAlphaScale)
                 )
+            )
+            val glassShadow = if (isMask) null else Shadow(
+                color = Color.Black.copy(alpha = 0.34f),
+                offset = Offset(0f, 4f),
+                blurRadius = 14f
+            )
+            LayeredOpticalText(
+                baseStyle = if (isMask) {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        color = Color.White,
+                        shadow = glassShadow
+                    )
+                } else {
+                    TextStyle(
+                        fontFamily = fontFamily,
+                        fontWeight = fontWeight,
+                        fontSize = fontSize,
+                        lineHeight = lineHeight,
+                        letterSpacing = letterSpacing,
+                        brush = glassBrush,
+                        shadow = glassShadow
+                    )
+                },
+                strokeBrush = glassBrush
             )
         }
     }

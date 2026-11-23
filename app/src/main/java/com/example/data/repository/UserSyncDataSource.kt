@@ -2,9 +2,12 @@ package com.example.data.repository
 
 import android.content.Context
 import androidx.core.content.edit
+import com.example.data.model.AppLanguageOption
+import com.example.data.model.DockLayoutMode
 import com.example.data.model.FavoriteDoc
 import com.example.data.model.ImageQualityPref
 import com.example.data.model.LockScreenSetDoc
+import com.example.data.model.MaterialNavStyle
 import com.example.data.model.RecentlyViewedDoc
 import com.example.data.model.ThemeMode
 import com.example.data.model.UiStyleMode
@@ -70,7 +73,7 @@ interface UserSyncDataSource {
 
 /**
  * Local-only SharedPreferences + StateFlow store for favorites, collections,
- * history, and studio preferences.
+ * history, lock-screen sets, and studio preferences.
  */
 class GuestLocalUserStore(context: Context) : UserSyncDataSource {
 
@@ -286,6 +289,10 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
         return Result.success(Unit)
     }
 
+    fun getCurrentPreferencesSync(): UserPreferencesDoc = preferencesFlow.value
+
+    fun getLockScreenSetsSync(): List<LockScreenSetDoc> = lockScreenSetsFlow.value
+
     private fun loadFavorites(): List<FavoriteDoc> {
         val raw = prefs.getString(KEY_FAVORITES, null) ?: return emptyList()
         return runCatching {
@@ -399,7 +406,34 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
                 ?: UiStyleMode.MATERIAL_3.name,
             hapticFeedbackEnabled = prefs.getBoolean(KEY_HAPTICS_ENABLED, true),
             reducedMotionEnabled = prefs.getBoolean(KEY_REDUCED_MOTION, false),
-            glassDepthIntensity = prefs.getFloat(KEY_GLASS_DEPTH, 1.0f).coerceIn(0.55f, 1.45f)
+            glassDepthIntensity = prefs.getFloat(KEY_GLASS_DEPTH, 1.0f).coerceIn(0.55f, 1.45f),
+            languageCode = prefs.getString(KEY_LANGUAGE_CODE, AppLanguageOption.ENGLISH.code)
+                ?: AppLanguageOption.ENGLISH.code,
+            onboardingCompleted = prefs.getBoolean(KEY_ONBOARDING_DONE, false),
+            dynamicThemingEnabled = prefs.getBoolean(KEY_DYNAMIC_THEMING, true),
+            customAccentHex = prefs.getLong(KEY_CUSTOM_ACCENT_HEX, 0xFF6B57A8L),
+            m3SurfaceDepth = prefs.getFloat(KEY_M3_SURFACE_DEPTH, 1.0f).coerceIn(0.6f, 1.4f),
+            m3CornerRadiusScale = prefs.getFloat(KEY_M3_CORNER_RADIUS, 1.0f).coerceIn(0.5f, 1.5f),
+            m3ElevationScale = prefs.getFloat(KEY_M3_ELEVATION, 1.0f).coerceIn(0f, 1.6f),
+            m3DensityScale = prefs.getFloat(KEY_M3_DENSITY, 1.0f).coerceIn(0.85f, 1.25f),
+            m3NavStyle = prefs.getString(KEY_M3_NAV_STYLE, MaterialNavStyle.PILL_TONAL.name)
+                ?: MaterialNavStyle.PILL_TONAL.name,
+            m3TypographyScale = prefs.getFloat(KEY_M3_TYPO_SCALE, 1.0f).coerceIn(0.85f, 1.25f),
+            m3MotionSpeed = prefs.getFloat(KEY_M3_MOTION_SPEED, 1.0f).coerceIn(0.6f, 1.5f),
+            glassBlurLevel = prefs.getFloat(KEY_GLASS_BLUR, 1.0f).coerceIn(0.4f, 1.5f),
+            glassRefractionLevel = prefs.getFloat(KEY_GLASS_REFRACTION, 1.0f).coerceIn(0.4f, 1.5f),
+            glassTransparencyLevel = prefs.getFloat(KEY_GLASS_TRANSPARENCY, 1.0f).coerceIn(0.5f, 1.4f),
+            glassLightResponse = prefs.getFloat(KEY_GLASS_LIGHT_RESP, 1.0f).coerceIn(0.4f, 1.5f),
+            glassSpecularHighlights = prefs.getFloat(KEY_GLASS_SPECULAR, 1.0f).coerceIn(0.3f, 1.5f),
+            glassBorderSoftness = prefs.getFloat(KEY_GLASS_BORDER_SOFT, 1.0f).coerceIn(0.4f, 1.5f),
+            glassAdaptiveContrast = prefs.getFloat(KEY_GLASS_CONTRAST, 1.0f).coerceIn(0.7f, 1.5f),
+            dockLayoutMode = prefs.getString(KEY_DOCK_LAYOUT, DockLayoutMode.AUTOMATIC.name)
+                ?: DockLayoutMode.AUTOMATIC.name,
+            useClassicClockHandles = prefs.getBoolean(KEY_CLASSIC_HANDLES, false),
+            weatherCity = prefs.getString(KEY_WEATHER_CITY, "") ?: "",
+            weatherUseLocation = prefs.getBoolean(KEY_WEATHER_USE_LOC, false),
+            lockScreenOverlayEnabled = prefs.getBoolean(KEY_OVERLAY_ENABLED, false),
+            activeOverlaySetId = prefs.getString(KEY_OVERLAY_SET_ID, "") ?: ""
         )
     }
 
@@ -415,6 +449,30 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
             putBoolean(KEY_HAPTICS_ENABLED, doc.hapticFeedbackEnabled)
             putBoolean(KEY_REDUCED_MOTION, doc.reducedMotionEnabled)
             putFloat(KEY_GLASS_DEPTH, doc.glassDepthIntensity.coerceIn(0.55f, 1.45f))
+            putString(KEY_LANGUAGE_CODE, doc.languageCode)
+            putBoolean(KEY_ONBOARDING_DONE, doc.onboardingCompleted)
+            putBoolean(KEY_DYNAMIC_THEMING, doc.dynamicThemingEnabled)
+            putLong(KEY_CUSTOM_ACCENT_HEX, doc.customAccentHex)
+            putFloat(KEY_M3_SURFACE_DEPTH, doc.m3SurfaceDepth)
+            putFloat(KEY_M3_CORNER_RADIUS, doc.m3CornerRadiusScale)
+            putFloat(KEY_M3_ELEVATION, doc.m3ElevationScale)
+            putFloat(KEY_M3_DENSITY, doc.m3DensityScale)
+            putString(KEY_M3_NAV_STYLE, doc.m3NavStyle)
+            putFloat(KEY_M3_TYPO_SCALE, doc.m3TypographyScale)
+            putFloat(KEY_M3_MOTION_SPEED, doc.m3MotionSpeed)
+            putFloat(KEY_GLASS_BLUR, doc.glassBlurLevel)
+            putFloat(KEY_GLASS_REFRACTION, doc.glassRefractionLevel)
+            putFloat(KEY_GLASS_TRANSPARENCY, doc.glassTransparencyLevel)
+            putFloat(KEY_GLASS_LIGHT_RESP, doc.glassLightResponse)
+            putFloat(KEY_GLASS_SPECULAR, doc.glassSpecularHighlights)
+            putFloat(KEY_GLASS_BORDER_SOFT, doc.glassBorderSoftness)
+            putFloat(KEY_GLASS_CONTRAST, doc.glassAdaptiveContrast)
+            putString(KEY_DOCK_LAYOUT, doc.dockLayoutMode)
+            putBoolean(KEY_CLASSIC_HANDLES, doc.useClassicClockHandles)
+            putString(KEY_WEATHER_CITY, doc.weatherCity)
+            putBoolean(KEY_WEATHER_USE_LOC, doc.weatherUseLocation)
+            putBoolean(KEY_OVERLAY_ENABLED, doc.lockScreenOverlayEnabled)
+            putString(KEY_OVERLAY_SET_ID, doc.activeOverlaySetId)
         }
     }
 
@@ -438,6 +496,7 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
                                 zoomScale = obj.optDouble("zoomScale", 1.0).toFloat().coerceIn(1f, 4f),
                                 panOffsetX = obj.optDouble("panOffsetX", 0.0).toFloat(),
                                 panOffsetY = obj.optDouble("panOffsetY", 0.0).toFloat(),
+                                rotationDegrees = obj.optDouble("rotationDegrees", 0.0).toFloat(),
                                 dimFraction = obj.optDouble("dimFraction", 0.0).toFloat().coerceIn(0f, 0.5f),
                                 lookFilterName = obj.optString("lookFilterName", "ORIGINAL"),
                                 isFavorite = obj.optBoolean("isFavorite", false),
@@ -464,6 +523,7 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
                     put("zoomScale", set.zoomScale.toDouble())
                     put("panOffsetX", set.panOffsetX.toDouble())
                     put("panOffsetY", set.panOffsetY.toDouble())
+                    put("rotationDegrees", set.rotationDegrees.toDouble())
                     put("dimFraction", set.dimFraction.toDouble())
                     put("lookFilterName", set.lookFilterName)
                     put("isFavorite", set.isFavorite)
@@ -502,5 +562,29 @@ class GuestLocalUserStore(context: Context) : UserSyncDataSource {
         private const val KEY_GLASS_DEPTH = "glass_depth_intensity"
         private const val KEY_LOCK_SCREEN_SETS = "lock_screen_sets_json"
         private const val KEY_DEPTH_CLOCK_CONFIG = "depth_clock_design_json"
+        private const val KEY_LANGUAGE_CODE = "app_language_code"
+        private const val KEY_ONBOARDING_DONE = "onboarding_completed"
+        private const val KEY_DYNAMIC_THEMING = "dynamic_theming_enabled"
+        private const val KEY_CUSTOM_ACCENT_HEX = "custom_accent_hex"
+        private const val KEY_M3_SURFACE_DEPTH = "m3_surface_depth"
+        private const val KEY_M3_CORNER_RADIUS = "m3_corner_radius"
+        private const val KEY_M3_ELEVATION = "m3_elevation"
+        private const val KEY_M3_DENSITY = "m3_density"
+        private const val KEY_M3_NAV_STYLE = "m3_nav_style"
+        private const val KEY_M3_TYPO_SCALE = "m3_typo_scale"
+        private const val KEY_M3_MOTION_SPEED = "m3_motion_speed"
+        private const val KEY_GLASS_BLUR = "glass_blur"
+        private const val KEY_GLASS_REFRACTION = "glass_refraction"
+        private const val KEY_GLASS_TRANSPARENCY = "glass_transparency"
+        private const val KEY_GLASS_LIGHT_RESP = "glass_light_resp"
+        private const val KEY_GLASS_SPECULAR = "glass_specular"
+        private const val KEY_GLASS_BORDER_SOFT = "glass_border_soft"
+        private const val KEY_GLASS_CONTRAST = "glass_contrast"
+        private const val KEY_DOCK_LAYOUT = "dock_layout_mode"
+        private const val KEY_CLASSIC_HANDLES = "use_classic_clock_handles"
+        private const val KEY_WEATHER_CITY = "weather_city"
+        private const val KEY_WEATHER_USE_LOC = "weather_use_location"
+        private const val KEY_OVERLAY_ENABLED = "lock_screen_overlay_enabled"
+        private const val KEY_OVERLAY_SET_ID = "active_overlay_set_id"
     }
 }

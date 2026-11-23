@@ -183,24 +183,43 @@ internal data class BackdropOpticalPatch(
  */
 object LiquidGlassClockEngine {
 
+    private val heightMapCache = android.util.LruCache<Int, Bitmap>(6)
+
+    internal fun getCachedHeightMap(key: Int): Bitmap? {
+        val bmp = heightMapCache.get(key)
+        return if (bmp != null && !bmp.isRecycled) bmp else null
+    }
+
+    internal fun putCachedHeightMap(key: Int, bmp: Bitmap) {
+        if (!bmp.isRecycled) {
+            heightMapCache.put(key, bmp)
+        }
+    }
+
     internal fun resolveAdaptiveOptics(
         config: LiquidGlassConfig,
-        avgLuminance: Float
+        avgLuminance: Float,
+        blurMultiplier: Float = 1f,
+        refractionMultiplier: Float = 1f,
+        transparencyMultiplier: Float = 1f,
+        lightResponseMultiplier: Float = 1f,
+        specularMultiplier: Float = 1f,
+        contrastMultiplier: Float = 1f
     ): ResolvedOpticalParams {
         val safe = config.sanitized()
         val lum = avgLuminance.coerceIn(0f, 1f)
 
-        var specular = safe.specularIntensity
-        var innerShadow = safe.innerThicknessShadow
-        var dropShadow = safe.backdropDropShadow
+        var specular = (safe.specularIntensity * specularMultiplier).coerceIn(0f, 1.50f)
+        var innerShadow = (safe.innerThicknessShadow * lightResponseMultiplier).coerceIn(0f, 0.65f)
+        var dropShadow = (safe.backdropDropShadow * contrastMultiplier).coerceIn(0f, 1.0f)
 
         if (safe.adaptiveContrast) {
             if (lum > 0.70f) {
-                val brightFactor = ((lum - 0.70f) / 0.30f).coerceIn(0f, 1f)
-                innerShadow = (innerShadow + brightFactor * 0.24f).coerceIn(0f, 0.60f)
+                val brightFactor = ((lum - 0.70f) / 0.30f).coerceIn(0f, 1f) * contrastMultiplier
+                innerShadow = (innerShadow + brightFactor * 0.24f).coerceIn(0f, 0.65f)
                 dropShadow = (dropShadow + brightFactor * 0.42f).coerceIn(0f, 1.0f)
             } else if (lum < 0.25f) {
-                val darkFactor = ((0.25f - lum) / 0.25f).coerceIn(0f, 1f)
+                val darkFactor = ((0.25f - lum) / 0.25f).coerceIn(0f, 1f) * lightResponseMultiplier
                 specular = (specular + darkFactor * 0.42f).coerceIn(0f, 1.50f)
             }
         }
@@ -212,16 +231,16 @@ object LiquidGlassClockEngine {
 
         return ResolvedOpticalParams(
             avgLuminance = lum,
-            refractionStrength = safe.refractionStrength,
+            refractionStrength = (safe.refractionStrength * refractionMultiplier).coerceIn(0f, 44f),
             ior = safe.ior,
             bevelWidth = safe.bevelWidth,
-            chromaticAberration = safe.chromaticAberration,
-            frostBlur = safe.frostBlur,
+            chromaticAberration = (safe.chromaticAberration * refractionMultiplier.coerceIn(0.6f, 1.4f)).coerceIn(0f, 8f),
+            frostBlur = (safe.frostBlur * blurMultiplier).coerceIn(0f, 24f),
             glassSaturation = safe.glassSaturation,
             tintR = tr,
             tintG = tg,
             tintB = tb,
-            tintOpacity = safe.tintOpacity,
+            tintOpacity = (safe.tintOpacity * transparencyMultiplier).coerceIn(0f, 0.85f),
             specularIntensity = specular,
             lightAngleRad = (safe.lightAngle * PI / 180.0).toFloat(),
             innerThicknessShadow = innerShadow,
@@ -762,6 +781,12 @@ object LiquidGlassClockEngine {
     """
 }
 
+private data class CapturedGlyphState(
+    val heightMap: Bitmap,
+    val captureKey: Any?,
+    val size: IntSize
+)
+
 /**
  * Dual-pass Compose optical clock surface for [HyperOsClockFinish.BLUR_GLASS]:
  * Captures the live typography + glyphs offscreen into [GraphicsLayer] -> builds multi-radius
@@ -788,16 +813,26 @@ internal fun LiquidGlassClockLayer(
     maskContent: @Composable () -> Unit
 ) {
     val glyphCaptureLayer: GraphicsLayer = rememberGraphicsLayer()
-    var unscaledSize by remember { mutableStateOf(IntSize.Zero) }
-    var glyphHeightMap by remember { mutableStateOf<Bitmap?>(null) }
+    var maskSize by remember { mutableStateOf(IntSize.Zero) }
+    var capturedState by remember { mutableStateOf<CapturedGlyphState?>(null) }
 
     val safeConfig = remember(liquidGlassConfig) { liquidGlassConfig.sanitized() }
     val density = LocalDensity.current
+    val customTokens = com.example.ui.theme.LocalThemeCustomization.current
+    val effectiveFrostBlur = (safeConfig.frostBlur * customTokens.glassBlurLevel).coerceIn(0f, 24f)
 
-    // Rebuild multi-radius bevel height map whenever clock glyphs, face, font, weight, or bevelWidth change
-    LaunchedEffect(captureKey, unscaledSize, safeConfig.bevelWidth) {
-        if (unscaledSize.width <= 0 || unscaledSize.height <= 0) return@LaunchedEffect
-        // Wait two frame commits so Compose finishes drawing new face typography into glyphCaptureLayer
+    // Rebuild (or read LRU) multi-radius bevel height map whenever clock glyphs, face, font, weight, or bevelWidth change
+    LaunchedEffect(captureKey, maskSize, safeConfig.bevelWidth) {
+        if (maskSize.width <= 0 || maskSize.height <= 0) return@LaunchedEffect
+        val lruKey = ((captureKey?.hashCode() ?: 0) * 31 + maskSize.width) * 31 +
+            maskSize.height * 17 + safeConfig.bevelWidth.roundToInt()
+        val cached = LiquidGlassClockEngine.getCachedHeightMap(lruKey)
+        if (cached != null) {
+            capturedState = CapturedGlyphState(cached, captureKey, maskSize)
+            return@LaunchedEffect
+        }
+
+        // Wait two frame commits so Compose finishes laying out & drawing new face typography into glyphCaptureLayer
         withFrameNanos { }
         withFrameNanos { }
         val captured = runCatching {
@@ -838,8 +873,13 @@ internal fun LiquidGlassClockLayer(
             } else null
         }.getOrNull()
         if (captured != null) {
-            glyphHeightMap = captured
+            LiquidGlassClockEngine.putCachedHeightMap(lruKey, captured)
+            capturedState = CapturedGlyphState(captured, captureKey, maskSize)
         }
+    }
+
+    val activeCapture = capturedState?.takeIf {
+        it.captureKey == captureKey && it.size == maskSize && !it.heightMap.isRecycled
     }
 
     // Re-extract live cropped background pixel patch whenever clock moves, wallpaper pans/zooms, or frostBlur changes
@@ -855,13 +895,13 @@ internal fun LiquidGlassClockLayer(
         panOffset.y.roundToInt(),
         dimFraction,
         lookFilter,
-        safeConfig.frostBlur,
-        unscaledSize,
+        effectiveFrostBlur,
+        maskSize,
         fallbackPrimary,
         fallbackSecondary
     ) {
-        val targetW = (glyphHeightMap?.width ?: unscaledSize.width.coerceIn(64, 420)).coerceIn(48, 520)
-        val targetH = (glyphHeightMap?.height ?: unscaledSize.height.coerceIn(32, 320)).coerceIn(32, 520)
+        val targetW = (activeCapture?.heightMap?.width ?: maskSize.width.coerceIn(64, 420)).coerceIn(48, 520)
+        val targetH = (activeCapture?.heightMap?.height ?: maskSize.height.coerceIn(32, 320)).coerceIn(32, 520)
         LiquidGlassClockEngine.extractCroppedBackgroundPatch(
             backdropBitmap = backdropBitmap,
             viewportSize = viewportSize,
@@ -870,7 +910,7 @@ internal fun LiquidGlassClockLayer(
             panOffset = panOffset,
             dimFraction = dimFraction,
             lookFilter = lookFilter,
-            frostBlurPx = safeConfig.frostBlur,
+            frostBlurPx = effectiveFrostBlur,
             fallbackPrimary = fallbackPrimary,
             fallbackSecondary = fallbackSecondary,
             patchWidth = targetW,
@@ -878,12 +918,21 @@ internal fun LiquidGlassClockLayer(
         )
     }
 
-    val resolvedOptics = remember(safeConfig, bgPatch.avgLuminance) {
-        LiquidGlassClockEngine.resolveAdaptiveOptics(safeConfig, bgPatch.avgLuminance)
+    val resolvedOptics = remember(safeConfig, bgPatch.avgLuminance, customTokens) {
+        LiquidGlassClockEngine.resolveAdaptiveOptics(
+            config = safeConfig,
+            avgLuminance = bgPatch.avgLuminance,
+            blurMultiplier = customTokens.glassBlurLevel,
+            refractionMultiplier = customTokens.glassRefractionLevel,
+            transparencyMultiplier = customTokens.glassTransparencyLevel,
+            lightResponseMultiplier = customTokens.glassLightResponse,
+            specularMultiplier = customTokens.glassSpecularHighlights,
+            contrastMultiplier = customTokens.glassAdaptiveContrast
+        )
     }
 
-    val softwareRendered = remember(glyphHeightMap, bgPatch, resolvedOptics, scaleXAspect, scaleYAspect, opacity) {
-        val hMap = glyphHeightMap
+    val softwareRendered = remember(activeCapture, bgPatch, resolvedOptics, scaleXAspect, scaleYAspect, opacity) {
+        val hMap = activeCapture?.heightMap
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && hMap != null) {
             LiquidGlassClockEngine.renderOpticalGlassSoftwareBitmap(
                 glyphMap = hMap,
@@ -899,37 +948,36 @@ internal fun LiquidGlassClockLayer(
         }
     }
 
-    Box(
-        modifier = modifier.onSizeChanged { measured ->
-            if (measured.width > 0 && measured.height > 0) {
-                unscaledSize = measured
-            }
-        }
-    ) {
-        // Hidden offscreen glyph recorder: records crisp alpha silhouettes without painting flat fallback
+    Box(modifier = modifier) {
+        // Independent mask measurement ensures previous face bounds never constrain or stretch a newly selected face
         Box(
-            modifier = Modifier.drawWithContent {
-                glyphCaptureLayer.record {
-                    this@drawWithContent.drawContent()
+            modifier = Modifier
+                .onSizeChanged { measured ->
+                    if (measured.width > 0 && measured.height > 0) {
+                        maskSize = measured
+                    }
                 }
-                if (glyphHeightMap == null) {
-                    // Translucent placeholder shimmer only while single warm-up pass completes
-                    drawLayer(glyphCaptureLayer)
+                .drawWithContent {
+                    glyphCaptureLayer.record {
+                        this@drawWithContent.drawContent()
+                    }
+                    if (activeCapture == null) {
+                        drawLayer(glyphCaptureLayer)
+                    }
                 }
-            }
         ) {
             maskContent()
         }
 
-        val hMap = glyphHeightMap
-        if (hMap != null && unscaledSize.width > 0 && unscaledSize.height > 0) {
-            val canvasWidthDp = with(density) { unscaledSize.width.toDp() }
-            val canvasHeightDp = with(density) { unscaledSize.height.toDp() }
+        val freshCapture = activeCapture
+        if (freshCapture != null && freshCapture.size.width > 0 && freshCapture.size.height > 0) {
+            val canvasWidthDp = with(density) { freshCapture.size.width.toDp() }
+            val canvasHeightDp = with(density) { freshCapture.size.height.toDp() }
 
             Canvas(modifier = Modifier.size(canvasWidthDp, canvasHeightDp)) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     drawAgslLiquidGlass(
-                        glyphMap = hMap,
+                        glyphMap = freshCapture.heightMap,
                         bgPatch = bgPatch,
                         params = resolvedOptics,
                         scaleXAspect = scaleXAspect,

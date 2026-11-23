@@ -153,20 +153,30 @@ fun HomeScreen(
             .take(12)
     }
 
-    val greeting = remember {
+    val greeting = remember(discoverySeed) {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        when (hour) {
-            in 5..11 -> "Good morning"
-            in 12..16 -> "Good afternoon"
-            else -> "Good evening"
+        val timeGreeting = when (hour) {
+            in 5..11 -> listOf("Good morning", "Morning light awaits", "Fresh dawn canvas", "Rise & sculpt")
+            in 12..16 -> listOf("Good afternoon", "Midday focus", "Afternoon studio flow", "Sunlit horizon")
+            in 17..21 -> listOf("Good evening", "Golden hour drop", "Evening calm", "Twilight palette")
+            else -> listOf("Late-night studio", "Midnight OLED calm", "Quiet starfield hours", "After-dark canvas")
         }
+        val creativeSalutes = listOf(
+            "Curate your lock screen",
+            "Depth & glass ready",
+            "Dial in today's frame",
+            "Spatial clock craft"
+        )
+        val pool = timeGreeting + creativeSalutes
+        val idx = (((hour + discoverySeed) and 0x7FFFFFFFL) % pool.size).toInt()
+        pool[idx]
     }
 
     val dynamicMoodLine = remember(discoverySeed) {
         val moods = listOf(
-            "Freshly curated from $totalCatalogCount+ 4K canvases",
-            "Live studio mix • 95+ pieces per category",
-            "Pull down or tap Shuffle anytime for a new vibe",
+            "Freshly curated from $totalCatalogCount+ high-res canvases",
+            "Stock drops, superhero crests & architectural calm",
+            "33 adaptive lock-screen clocks & Depth Engine V2",
             "Architectural calm, OLED obsidian & natural depth"
         )
         val idx = ((discoverySeed and 0x7FFFFFFFL) % moods.size).toInt()
@@ -201,13 +211,6 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TactileHudIconButton(
-                                icon = Icons.Rounded.Shuffle,
-                                contentDescription = "Shuffle featured scenes",
-                                onClick = onShuffleDiscovery,
-                                modifier = Modifier.testTag("home_shuffle_button")
-                            )
-
                             Box {
                                 TactileHudIconButton(
                                     icon = Icons.Rounded.MoreVert,

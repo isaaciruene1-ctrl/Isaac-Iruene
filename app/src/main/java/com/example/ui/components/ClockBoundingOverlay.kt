@@ -399,21 +399,22 @@ private fun CornerResizeGripHandle(
     reducedMotion: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val customTokens = com.example.ui.theme.LocalThemeCustomization.current
     val activeScale by animateFloatAsState(
         targetValue = if (isPressed && !reducedMotion) {
-            if (uiStyle == UiStyleMode.FROSTED_GLASS_OS) 1.24f else 1.12f
+            if (uiStyle == UiStyleMode.FROSTED_GLASS_OS && !customTokens.useClassicClockHandles) 1.24f else 1.12f
         } else 1.0f,
-        animationSpec = AppMotion.emphasisSpring(uiStyle, reducedMotion),
+        animationSpec = AppMotion.emphasisSpring(uiStyle, reducedMotion, customTokens.m3MotionSpeed),
         label = "corner_grip_scale"
     )
     val primaryColor = MaterialTheme.colorScheme.primary
     val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
     val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
 
-    val styleTag = if (uiStyle == UiStyleMode.FROSTED_GLASS_OS) {
-        "clock_grip_style_liquid_glass_${if (isBottomLeft) "bl" else "br"}"
-    } else {
-        "clock_grip_style_material3_${if (isBottomLeft) "bl" else "br"}"
+    val styleTag = when {
+        customTokens.useClassicClockHandles -> "clock_grip_style_classic_${if (isBottomLeft) "bl" else "br"}"
+        uiStyle == UiStyleMode.FROSTED_GLASS_OS -> "clock_grip_style_liquid_glass_${if (isBottomLeft) "bl" else "br"}"
+        else -> "clock_grip_style_material3_${if (isBottomLeft) "bl" else "br"}"
     }
 
     Box(
@@ -428,83 +429,93 @@ private fun CornerResizeGripHandle(
                 .testTag(styleTag),
             contentAlignment = Alignment.Center
         ) {
-            if (uiStyle == UiStyleMode.FROSTED_GLASS_OS) {
-            // Liquid Glass: Sculpted translucent curved glass arc hugging the rounded corner
-            Canvas(modifier = Modifier.size(34.dp)) {
-                val pad = 3.dp.toPx()
-                val arcSize = Size(size.width - pad * 2f, size.height - pad * 2f)
-                val startAngle = if (isBottomLeft) 90f else 0f
-                val sweepAngle = 90f
-
-                // Outer frosted refractive cushion arc
-                drawArc(
-                    color = primaryColor.copy(alpha = 0.28f),
-                    startAngle = startAngle,
-                    sweepAngle = sweepAngle,
-                    useCenter = false,
-                    topLeft = Offset(pad, pad),
-                    size = arcSize,
-                    style = Stroke(width = 8.5.dp.toPx(), cap = StrokeCap.Round)
-                )
-                // Core translucent milky glass arc
-                drawArc(
-                    brush = Brush.linearGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.94f),
-                            primaryColor.copy(alpha = 0.62f),
-                            Color.White.copy(alpha = 0.88f)
+            when {
+                customTokens.useClassicClockHandles -> {
+                    // Classic circular corner puck handle
+                    Canvas(modifier = Modifier.size(22.dp)) {
+                        drawCircle(color = surfaceColor, radius = size.minDimension * 0.44f)
+                        drawCircle(
+                            color = primaryColor,
+                            radius = size.minDimension * 0.44f,
+                            style = Stroke(width = 2.4.dp.toPx())
                         )
-                    ),
-                    startAngle = startAngle,
-                    sweepAngle = sweepAngle,
-                    useCenter = false,
-                    topLeft = Offset(pad, pad),
-                    size = arcSize,
-                    style = Stroke(width = 5.2.dp.toPx(), cap = StrokeCap.Round)
-                )
-                // Razor Fresnel specular highlight edge
-                drawArc(
-                    color = Color.White.copy(alpha = 0.96f),
-                    startAngle = startAngle + 6f,
-                    sweepAngle = sweepAngle - 12f,
-                    useCenter = false,
-                    topLeft = Offset(pad + 0.5.dp.toPx(), pad + 0.5.dp.toPx()),
-                    size = Size(arcSize.width - 1.dp.toPx(), arcSize.height - 1.dp.toPx()),
-                    style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-                )
-            }
-        } else {
-            // Material 3: Flat, crisp Pixel-inspired geometric right-angle corner bracket
-            Canvas(modifier = Modifier.size(28.dp)) {
-                val m = 4.dp.toPx()
-                val arm = 13.dp.toPx()
-                val bracketPath = Path().apply {
-                    if (isBottomLeft) {
-                        moveTo(m, size.height - m - arm)
-                        lineTo(m, size.height - m)
-                        lineTo(m + arm, size.height - m)
-                    } else {
-                        moveTo(size.width - m - arm, size.height - m)
-                        lineTo(size.width - m, size.height - m)
-                        lineTo(size.width - m, size.height - m - arm)
+                        drawCircle(color = primaryColor, radius = size.minDimension * 0.16f)
                     }
                 }
-                // Crisp tonal backing plate
-                drawPath(
-                    path = bracketPath,
-                    color = surfaceColor,
-                    style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Square, join = StrokeJoin.Miter)
-                )
-                // Flat Pixel accent L-bracket
-                drawPath(
-                    path = bracketPath,
-                    color = primaryColor,
-                    style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Square, join = StrokeJoin.Miter)
-                )
-                val dotPos = if (isBottomLeft) Offset(m, size.height - m) else Offset(size.width - m, size.height - m)
-                drawCircle(color = onPrimaryColor, radius = 2.dp.toPx(), center = dotPos)
+                uiStyle == UiStyleMode.FROSTED_GLASS_OS -> {
+                    // Liquid Glass: Sculpted translucent curved glass arc hugging the rounded corner
+                    Canvas(modifier = Modifier.size(34.dp)) {
+                        val pad = 3.dp.toPx()
+                        val arcSize = Size(size.width - pad * 2f, size.height - pad * 2f)
+                        val startAngle = if (isBottomLeft) 90f else 0f
+                        val sweepAngle = 90f
+
+                        drawArc(
+                            color = primaryColor.copy(alpha = 0.28f),
+                            startAngle = startAngle,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = Offset(pad, pad),
+                            size = arcSize,
+                            style = Stroke(width = 8.5.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                        drawArc(
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.94f),
+                                    primaryColor.copy(alpha = 0.62f),
+                                    Color.White.copy(alpha = 0.88f)
+                                )
+                            ),
+                            startAngle = startAngle,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = Offset(pad, pad),
+                            size = arcSize,
+                            style = Stroke(width = 5.2.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.96f),
+                            startAngle = startAngle + 6f,
+                            sweepAngle = sweepAngle - 12f,
+                            useCenter = false,
+                            topLeft = Offset(pad + 0.5.dp.toPx(), pad + 0.5.dp.toPx()),
+                            size = Size(arcSize.width - 1.dp.toPx(), arcSize.height - 1.dp.toPx()),
+                            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                    }
+                }
+                else -> {
+                    // Material 3: Flat, crisp Pixel-inspired geometric right-angle corner bracket
+                    Canvas(modifier = Modifier.size(28.dp)) {
+                        val m = 4.dp.toPx()
+                        val arm = 13.dp.toPx()
+                        val bracketPath = Path().apply {
+                            if (isBottomLeft) {
+                                moveTo(m, size.height - m - arm)
+                                lineTo(m, size.height - m)
+                                lineTo(m + arm, size.height - m)
+                            } else {
+                                moveTo(size.width - m - arm, size.height - m)
+                                lineTo(size.width - m, size.height - m)
+                                lineTo(size.width - m, size.height - m - arm)
+                            }
+                        }
+                        drawPath(
+                            path = bracketPath,
+                            color = surfaceColor,
+                            style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Square, join = StrokeJoin.Miter)
+                        )
+                        drawPath(
+                            path = bracketPath,
+                            color = primaryColor,
+                            style = Stroke(width = 3.4.dp.toPx(), cap = StrokeCap.Square, join = StrokeJoin.Miter)
+                        )
+                        val dotPos = if (isBottomLeft) Offset(m, size.height - m) else Offset(size.width - m, size.height - m)
+                        drawCircle(color = onPrimaryColor, radius = 2.dp.toPx(), center = dotPos)
+                    }
+                }
             }
-        }
         }
     }
 }

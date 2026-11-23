@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Backdrops</string>
+    <string name="widget_small_label">Backdrops 빠른 독 (3x1)</string>
+    <string name="widget_card_label">Backdrops 쇼케이스 (3x2)</string>
+    <string name="widget_studio_desc">Backdrops 뎁스 스튜디오 열기</string>
+    <string name="widget_apply">적용</string>
+    <string name="widget_favorite">즐겨찾기</string>
+    <string name="widget_favorited">저장됨</string>
+    <string name="nav_home">홈</string>
+    <string name="nav_explore">탐색</string>
+    <string name="nav_favorites">즐겨찾기</string>
+    <string name="nav_collections">컬렉션</string>
+    <string name="nav_profile">프로필</string>
+    <string name="settings_title">스튜디오 설정</string>
+    <string name="lock_screen_mode_title">잠금 화면 모드</string>
+    <string name="onboarding_welcome">Backdrops에 오신 것을 환영합니다</string>
+</resources>

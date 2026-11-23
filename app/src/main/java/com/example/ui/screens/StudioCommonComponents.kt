@@ -622,7 +622,8 @@ internal fun renderEditedWallpaperBitmap(
     } else {
         9f / 19.5f
     },
-    allowParallaxWidth: Boolean = false
+    allowParallaxWidth: Boolean = false,
+    rotationDegrees: Float = 0f
 ): Bitmap {
     val crop = computeCenteredViewportCropRect(
         sourceWidth = source.width,
@@ -636,10 +637,29 @@ internal fun renderEditedWallpaperBitmap(
         allowParallaxWidth = allowParallaxWidth
     )
 
-    val cropped = if (crop.left == 0 && crop.top == 0 && crop.width == source.width && crop.height == source.height) {
+    val normRot = ((rotationDegrees % 360f) + 360f) % 360f
+    val hasRotation = normRot > 0.25f && normRot < 359.75f
+
+    val cropped = if (!hasRotation && crop.left == 0 && crop.top == 0 && crop.width == source.width && crop.height == source.height) {
         source
-    } else {
+    } else if (!hasRotation) {
         Bitmap.createBitmap(source, crop.left, crop.top, crop.width, crop.height)
+    } else {
+        // Rotate around output center matching Compose Canvas framing
+        val out = createBitmap(crop.width, crop.height)
+        val canvas = AndroidCanvas(out)
+        val matrix = android.graphics.Matrix()
+        val scale = max(crop.width.toFloat() / source.width.toFloat(), crop.height.toFloat() / source.height.toFloat()) *
+            zoomScale.coerceIn(1f, 4f)
+        val panRatioX = if (viewportWidthPx > 0f) panOffset.x * (crop.width / viewportWidthPx) else 0f
+        val panRatioY = if (viewportHeightPx > 0f) panOffset.y * (crop.height / viewportHeightPx) else 0f
+        matrix.postTranslate(-source.width * 0.5f, -source.height * 0.5f)
+        matrix.postScale(scale, scale)
+        matrix.postRotate(rotationDegrees)
+        matrix.postTranslate(crop.width * 0.5f + panRatioX, crop.height * 0.5f + panRatioY)
+        val rotPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG or AndroidPaint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(source, matrix, rotPaint)
+        out
     }
 
     val matrixValues = lookFilter.toColorMatrixArray()

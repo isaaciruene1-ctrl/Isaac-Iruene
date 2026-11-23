@@ -8,7 +8,7 @@ import com.example.data.model.WallpaperCategory
 
 object WallpaperCatalog {
 
-    // Ensure every wallpaper has a strictly unique photo slug / seed URL so zero duplicates appear
+    // Ensure every wallpaper has a unique remote slug or distinct procedural seed so zero duplicates appear
     val allWallpapers: List<Wallpaper> by lazy {
         val raw = buildCatalogPartOne() +
             buildCatalogPartTwo() +
@@ -20,9 +20,11 @@ object WallpaperCatalog {
             buildCatalogPartEight() +
             buildCatalogPartNine() +
             buildCatalogPartTen() +
+            buildCatalogPartTwelve() +
             buildCatalogPartEleven() +
-            buildCatalogPartTwelve()
-        val seenSlugs = mutableSetOf<String>()
+            buildCatalogExpansion()
+
+        val seenKeys = mutableSetOf<String>()
         val fallbackSlugs = listOf(
             "1507525428034-b723cf961d3e",
             "1511884642898-4c92249e20b6",
@@ -33,16 +35,22 @@ object WallpaperCatalog {
         )
         var fallbackIdx = 0
         raw.map { wp ->
-            val slug = wp.thumbnailUrl.substringAfter("photo-").substringBefore("?")
-            if (seenSlugs.add(slug)) {
+            if (ProceduralWallpaperRenderer.isProceduralUrl(wp.thumbnailUrl)) {
+                wp
+            } else if (wp.thumbnailUrl.contains("bd_exp=")) {
                 wp
             } else {
-                val altSlug = fallbackSlugs[fallbackIdx++ % fallbackSlugs.size]
-                seenSlugs.add(altSlug)
-                wp.copy(
-                    thumbnailUrl = "https://images.unsplash.com/photo-$altSlug?auto=format&fit=crop&crop=entropy,faces,center&w=720&h=1120&q=82",
-                    fullResUrl = "https://images.unsplash.com/photo-$altSlug?auto=format&fit=crop&crop=entropy,faces,center&w=${wp.width}&h=${wp.height}&q=95"
-                )
+                val slug = wp.thumbnailUrl.substringAfter("photo-").substringBefore("?")
+                if (seenKeys.add(slug)) {
+                    wp
+                } else {
+                    val altSlug = fallbackSlugs[fallbackIdx++ % fallbackSlugs.size]
+                    seenKeys.add(altSlug)
+                    wp.copy(
+                        thumbnailUrl = "https://images.unsplash.com/photo-$altSlug?auto=format&fit=crop&crop=entropy,faces,center&w=720&h=1120&q=82",
+                        fullResUrl = "https://images.unsplash.com/photo-$altSlug?auto=format&fit=crop&crop=entropy,faces,center&w=${wp.width}&h=${wp.height}&q=95"
+                    )
+                }
             }
         }
     }
@@ -55,14 +63,20 @@ object WallpaperCatalog {
 
     fun getForCollection(collection: DiscoveryCollection): List<Wallpaper> = when (collection) {
         DiscoveryCollection.FEATURED -> allWallpapers.filter { DiscoveryCollection.FEATURED in it.collections }
-        DiscoveryCollection.TRENDING -> allWallpapers.sortedByDescending { it.popularityScore }.take(18)
+        DiscoveryCollection.TRENDING -> allWallpapers.sortedByDescending { it.popularityScore }.take(24)
         DiscoveryCollection.EDITORS_PICKS -> allWallpapers.filter { DiscoveryCollection.EDITORS_PICKS in it.collections }
-        DiscoveryCollection.NEW_ARRIVALS -> allWallpapers.sortedByDescending { it.addedOrder }.take(18)
+        DiscoveryCollection.NEW_ARRIVALS -> allWallpapers.sortedByDescending { it.addedOrder }.take(24)
         DiscoveryCollection.ULTRA_HD_4K -> allWallpapers.filter { DiscoveryCollection.ULTRA_HD_4K in it.collections }
         DiscoveryCollection.AMOLED -> allWallpapers.filter {
             it.category == WallpaperCategory.AMOLED || DiscoveryCollection.AMOLED in it.collections
         }
         DiscoveryCollection.DEPTH_STUDIO -> allWallpapers.filter { it.supportsDepthEffect }
+        DiscoveryCollection.STOCK -> allWallpapers.filter {
+            it.category == WallpaperCategory.STOCK || DiscoveryCollection.STOCK in it.collections
+        }
+        DiscoveryCollection.SUPERHERO -> allWallpapers.filter {
+            it.category == WallpaperCategory.SUPERHERO || DiscoveryCollection.SUPERHERO in it.collections
+        }
         DiscoveryCollection.NATURE -> allWallpapers.filter { it.category == WallpaperCategory.NATURE }
         DiscoveryCollection.ABSTRACT -> allWallpapers.filter { it.category == WallpaperCategory.ABSTRACT }
         DiscoveryCollection.ARCHITECTURE -> allWallpapers.filter { it.category == WallpaperCategory.ARCHITECTURE }
@@ -124,6 +138,8 @@ object WallpaperCatalog {
                 when (col) {
                     DiscoveryCollection.DEPTH_STUDIO -> wp.supportsDepthEffect
                     DiscoveryCollection.AMOLED -> wp.category == WallpaperCategory.AMOLED || col in wp.collections
+                    DiscoveryCollection.STOCK -> wp.category == WallpaperCategory.STOCK || col in wp.collections
+                    DiscoveryCollection.SUPERHERO -> wp.category == WallpaperCategory.SUPERHERO || col in wp.collections
                     else -> col in wp.collections || wp.category.displayName.equals(col.title, ignoreCase = true)
                 }
             } ?: true
@@ -146,8 +162,8 @@ object WallpaperCatalog {
     }
 
     val searchSuggestions: List<String> = listOf(
-        "Pixel", "Pastel", "AMOLED", "Depth Studio", "4K", "Mountains",
-        "Minimalist", "Space", "Neon", "Architecture", "Automotive",
-        "Kyoto", "Wildlife"
+        "Stock", "Superhero", "Pixel", "Pastel", "AMOLED", "Depth Studio",
+        "4K", "Mountains", "Minimalist", "Space", "Neon", "Architecture",
+        "Automotive", "Kyoto"
     )
 }

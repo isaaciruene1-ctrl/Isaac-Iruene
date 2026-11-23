@@ -125,6 +125,8 @@ internal fun buildCategoryBatch(
             WallpaperCategory.CINEMATIC -> add(DiscoveryCollection.CINEMATIC)
             WallpaperCategory.FUTURISTIC -> add(DiscoveryCollection.GAMING)
             WallpaperCategory.DEPTH_STUDIO -> add(DiscoveryCollection.DEPTH_STUDIO)
+            WallpaperCategory.STOCK -> add(DiscoveryCollection.STOCK)
+            WallpaperCategory.SUPERHERO -> add(DiscoveryCollection.SUPERHERO)
         }
     }
     seededEntry(

@@ -79,12 +79,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.example.data.model.MaterialNavStyle
 import com.example.data.model.UiStyleMode
 import com.example.ui.theme.AppMotion
 import com.example.ui.theme.LocalAmoledDarkFlag
 import com.example.ui.theme.LocalDarkThemeFlag
 import com.example.ui.theme.LocalGlassDepthIntensity
 import com.example.ui.theme.LocalReducedMotionFlag
+import com.example.ui.theme.LocalThemeCustomization
 import com.example.ui.theme.LocalUiStyleMode
 import com.example.ui.theme.rememberStudioHaptics
 import kotlinx.coroutines.coroutineScope
@@ -175,15 +177,23 @@ fun glassSpecularBorder(accent: Color = MaterialTheme.colorScheme.primary): Bord
     if (uiStyle != UiStyleMode.FROSTED_GLASS_OS) return null
     val isDark = LocalDarkThemeFlag.current
     val glassDepth = LocalGlassDepthIntensity.current
+    val customTokens = LocalThemeCustomization.current
+    val specularMul = customTokens.glassSpecularHighlights.coerceIn(0.2f, 1.5f)
+    val softnessAlpha = (1.15f - customTokens.glassBorderSoftness * 0.45f).coerceIn(0.45f, 1.0f)
+
     val highlight = if (isDark) {
-        Color.White.copy(alpha = (0.38f * glassDepth).coerceIn(0.24f, 0.52f))
+        Color.White.copy(alpha = (0.34f * glassDepth * specularMul * softnessAlpha).coerceIn(0.14f, 0.56f))
     } else {
-        Color.White.copy(alpha = 0.92f)
+        Color.White.copy(alpha = (0.76f * specularMul * softnessAlpha).coerceIn(0.32f, 0.92f))
     }
-    val mid = accent.copy(alpha = if (isDark) 0.44f else 0.28f)
-    val rim = if (isDark) Color.White.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.10f)
+    val mid = accent.copy(alpha = ((if (isDark) 0.40f else 0.24f) * softnessAlpha).coerceIn(0.10f, 0.52f))
+    val rim = if (isDark) {
+        Color.White.copy(alpha = (0.16f * softnessAlpha).coerceIn(0.06f, 0.28f))
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = (0.14f * softnessAlpha).coerceIn(0.05f, 0.22f))
+    }
     return BorderStroke(
-        width = 1.15.dp,
+        width = (1.0f + customTokens.glassBorderSoftness * 0.35f).dp,
         brush = Brush.linearGradient(colors = listOf(highlight, mid, rim))
     )
 }
@@ -202,16 +212,19 @@ fun TactileSurface(
     val isDark = LocalDarkThemeFlag.current
     val isAmoled = LocalAmoledDarkFlag.current
     val glassDepth = LocalGlassDepthIntensity.current
+    val customTokens = LocalThemeCustomization.current
     val isGlass = uiStyle == UiStyleMode.FROSTED_GLASS_OS
 
     val resolvedColor = if (isGlass) {
-        val defaultAlpha = when {
-            isAmoled -> 0.93f
-            isDark -> 0.89f
-            else -> 0.84f
+        val baseDefaultAlpha = when {
+            isAmoled -> 0.92f
+            isDark -> 0.86f
+            else -> 0.72f
         }
-        val tunedAlpha = glassTintAlpha ?: (defaultAlpha + (glassDepth - 1f) * 0.08f)
-        containerColor.copy(alpha = tunedAlpha.coerceIn(if (isDark) 0.82f else 0.68f, 0.97f))
+        val transparencyShift = (1f - customTokens.glassTransparencyLevel) * 0.14f
+        val contrastBoost = (customTokens.glassAdaptiveContrast - 1f) * 0.10f
+        val tunedAlpha = glassTintAlpha ?: (baseDefaultAlpha + (glassDepth - 1f) * 0.06f + transparencyShift + contrastBoost)
+        containerColor.copy(alpha = tunedAlpha.coerceIn(if (isDark) 0.74f else 0.58f, 0.97f))
     } else {
         containerColor
     }
@@ -220,13 +233,15 @@ fun TactileSurface(
             .takeOrElse { MaterialTheme.colorScheme.onSurface }
     }
 
+    // Zero elevation shadow on translucent glass surfaces prevents Compose from rendering
+    // an opaque rectangular shadow slab behind curved Light Mode glass pills.
     Surface(
         color = resolvedColor,
         contentColor = resolvedContentColor,
         shape = shape,
         border = glassSpecularBorder(),
-        tonalElevation = if (isGlass) 0.dp else tonalElevation,
-        shadowElevation = if (isGlass) 8.dp else 0.dp,
+        tonalElevation = if (isGlass) 0.dp else tonalElevation * customTokens.m3ElevationScale,
+        shadowElevation = if (isGlass) 0.dp else (tonalElevation * 0.4f * customTokens.m3ElevationScale),
         modifier = modifier,
         content = content
     )
@@ -234,7 +249,7 @@ fun TactileSurface(
 
 /**
  * Tactile circular HUD button adapting cleanly between Liquid Glass translucent pills
- * and Material 3 tonal buttons with high-contrast Light/Dark/AMOLED visibility.
+ * and Material 3 tonal buttons without Light Mode rectangular backing boxes.
  */
 @Composable
 fun TactileHudIconButton(
@@ -248,17 +263,21 @@ fun TactileHudIconButton(
 ) {
     val uiStyle = LocalUiStyleMode.current
     val reducedMotion = LocalReducedMotionFlag.current
+    val customTokens = LocalThemeCustomization.current
     val isGlass = uiStyle == UiStyleMode.FROSTED_GLASS_OS
     val isDark = LocalDarkThemeFlag.current
 
     val scale by animateFloatAsState(
         targetValue = if (active) 1.07f else 1f,
-        animationSpec = AppMotion.spatialSpring(uiStyle, reducedMotion),
+        animationSpec = AppMotion.spatialSpring(uiStyle, reducedMotion, customTokens.m3MotionSpeed),
         label = "hud_btn_scale"
     )
     val resolvedBg = when {
-        active -> MaterialTheme.colorScheme.primary.copy(alpha = if (isGlass) 0.92f else 1f)
-        isGlass -> containerColor.copy(alpha = if (isDark) 0.84f else 0.86f)
+        active -> MaterialTheme.colorScheme.primary.copy(alpha = if (isGlass) 0.90f else 1f)
+        isGlass -> containerColor.copy(
+            alpha = if (isDark) (0.78f + (1f - customTokens.glassTransparencyLevel) * 0.12f).coerceIn(0.66f, 0.92f)
+            else (0.68f + (1f - customTokens.glassTransparencyLevel) * 0.14f).coerceIn(0.56f, 0.86f)
+        )
         else -> containerColor
     }
     val resolvedTint = if (active) MaterialTheme.colorScheme.onPrimary else contentColor
@@ -268,8 +287,8 @@ fun TactileHudIconButton(
         contentColor = resolvedTint,
         shape = CircleShape,
         border = glassSpecularBorder(),
-        tonalElevation = if (isGlass) 0.dp else 3.dp,
-        shadowElevation = if (isGlass) 6.dp else 0.dp,
+        tonalElevation = if (isGlass) 0.dp else (3.dp * customTokens.m3ElevationScale),
+        shadowElevation = 0.dp,
         modifier = modifier
             .size(48.dp)
             .scale(scale)
@@ -535,22 +554,29 @@ fun PixelMaterialBottomBar(
     modifier: Modifier = Modifier
 ) {
     val reducedMotion = LocalReducedMotionFlag.current
+    val customTokens = LocalThemeCustomization.current
+    val isFloating = customTokens.m3NavStyle == MaterialNavStyle.FLOATING_CAPSULE
+    val showLabels = customTokens.m3NavStyle != MaterialNavStyle.COMPACT_BAR
+
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 4.dp,
-        modifier = modifier.testTag("bottom_navigation_bar")
+        tonalElevation = 4.dp * customTokens.m3ElevationScale,
+        modifier = modifier
+            .let { if (isFloating) it.padding(horizontal = 14.dp, vertical = 6.dp).clip(RoundedCornerShape(28.dp)) else it }
+            .testTag("bottom_navigation_bar")
     ) {
         destinations.forEach { dest ->
             val selected = currentRoute == dest.route
             val iconScale by animateFloatAsState(
                 targetValue = if (selected && !reducedMotion) 1.05f else 1.0f,
-                animationSpec = AppMotion.spatialSpring(UiStyleMode.MATERIAL_3, reducedMotion),
+                animationSpec = AppMotion.spatialSpring(UiStyleMode.MATERIAL_3, reducedMotion, customTokens.m3MotionSpeed),
                 label = "m3_nav_icon_scale"
             )
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelectRoute(dest.route) },
+                alwaysShowLabel = showLabels,
                 icon = {
                     Icon(
                         imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
@@ -558,13 +584,15 @@ fun PixelMaterialBottomBar(
                         modifier = Modifier.scale(iconScale)
                     )
                 },
-                label = {
-                    Text(
-                        text = dest.label,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
+                label = if (showLabels) {
+                    {
+                        Text(
+                            text = dest.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else null,
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     selectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -654,15 +682,16 @@ fun FrostedFloatingNavDock(
         }
     }
 
+    val customTokens = LocalThemeCustomization.current
     val containerBg = when {
-        isAmoled -> Color(0xFF14141D).copy(alpha = (0.88f + (glassDepth - 1f) * 0.06f).coerceIn(0.80f, 0.96f))
-        isDark -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = (0.86f + (glassDepth - 1f) * 0.08f).coerceIn(0.78f, 0.95f))
-        else -> Color.White.copy(alpha = (0.84f + (glassDepth - 1f) * 0.08f).coerceIn(0.74f, 0.94f))
+        isAmoled -> Color(0xFF14141D).copy(alpha = (0.88f + (glassDepth - 1f) * 0.06f).coerceIn(0.76f, 0.96f))
+        isDark -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = (0.86f + (glassDepth - 1f) * 0.08f).coerceIn(0.74f, 0.95f))
+        else -> MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = (0.76f + (1f - customTokens.glassTransparencyLevel) * 0.10f).coerceIn(0.62f, 0.88f))
     }
 
     val liftScale by animateFloatAsState(
         targetValue = if (isDraggingPill && !reducedMotion) 1.07f else 1.0f,
-        animationSpec = AppMotion.spatialSpring(UiStyleMode.FROSTED_GLASS_OS, reducedMotion),
+        animationSpec = AppMotion.spatialSpring(UiStyleMode.FROSTED_GLASS_OS, reducedMotion, customTokens.m3MotionSpeed),
         label = "pill_drag_lift"
     )
     val dragStretchFactor by animateFloatAsState(
@@ -671,7 +700,7 @@ fun FrostedFloatingNavDock(
         } else {
             1.0f
         },
-        animationSpec = AppMotion.spatialSpring(UiStyleMode.FROSTED_GLASS_OS, reducedMotion),
+        animationSpec = AppMotion.spatialSpring(UiStyleMode.FROSTED_GLASS_OS, reducedMotion, customTokens.m3MotionSpeed),
         label = "pill_drag_stretch"
     )
 
@@ -686,18 +715,9 @@ fun FrostedFloatingNavDock(
             color = containerBg,
             contentColor = MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(32.dp),
-            border = BorderStroke(
-                width = 1.25.dp,
-                brush = Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = if (isDark) 0.34f else 0.92f),
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.34f),
-                        MaterialTheme.colorScheme.outline.copy(alpha = if (isDark) 0.24f else 0.16f)
-                    )
-                )
-            ),
+            border = glassSpecularBorder(),
             tonalElevation = 0.dp,
-            shadowElevation = if (isDraggingPill) 18.dp else 14.dp,
+            shadowElevation = if (isDark) (if (isDraggingPill) 10.dp else 6.dp) else 0.dp,
             modifier = Modifier
                 .widthIn(max = 560.dp)
                 .fillMaxWidth()
@@ -936,10 +956,11 @@ fun FrostedFloatingNavRail(
     val glassDepth = LocalGlassDepthIntensity.current
     val haptics = rememberStudioHaptics()
 
+    val customTokens = LocalThemeCustomization.current
     val glassBg = when {
-        isAmoled -> Color(0xFF14141D).copy(alpha = (0.88f + (glassDepth - 1f) * 0.06f).coerceIn(0.80f, 0.96f))
-        isDark -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = (0.86f + (glassDepth - 1f) * 0.08f).coerceIn(0.78f, 0.95f))
-        else -> Color.White.copy(alpha = (0.84f + (glassDepth - 1f) * 0.08f).coerceIn(0.74f, 0.94f))
+        isAmoled -> Color(0xFF14141D).copy(alpha = (0.88f + (glassDepth - 1f) * 0.06f).coerceIn(0.76f, 0.96f))
+        isDark -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = (0.86f + (glassDepth - 1f) * 0.08f).coerceIn(0.74f, 0.95f))
+        else -> MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = (0.76f + (1f - customTokens.glassTransparencyLevel) * 0.10f).coerceIn(0.62f, 0.88f))
     }
     Box(
         modifier = modifier
@@ -953,7 +974,8 @@ fun FrostedFloatingNavRail(
             contentColor = MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(30.dp),
             border = glassSpecularBorder(),
-            shadowElevation = 12.dp,
+            tonalElevation = 0.dp,
+            shadowElevation = if (isDark) 8.dp else 0.dp,
             modifier = Modifier
                 .fillMaxHeight()
                 .testTag("frosted_nav_rail")

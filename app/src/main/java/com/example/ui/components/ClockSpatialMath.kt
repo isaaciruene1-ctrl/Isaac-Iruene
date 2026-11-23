@@ -107,7 +107,6 @@ object ClockSpatialMath {
             }
 
             ClockGripTarget.CORNER_BR -> {
-                // Opposite corner anchored: Top-Left (startRect.leftPx, startRect.topPx)
                 val anchorX = startRect.leftPx
                 val anchorY = startRect.topPx
                 val availW = (vw - minMarginPx - anchorX).coerceAtLeast(minBoxW)
@@ -125,7 +124,6 @@ object ClockSpatialMath {
             }
 
             ClockGripTarget.CORNER_BL -> {
-                // Opposite corner anchored: Top-Right (startRect.rightPx, startRect.topPx)
                 val anchorX = startRect.rightPx
                 val anchorY = startRect.topPx
                 val availW = (anchorX - minMarginPx).coerceAtLeast(minBoxW)
@@ -143,7 +141,6 @@ object ClockSpatialMath {
             }
 
             ClockGripTarget.CORNER_TR -> {
-                // Opposite corner anchored: Bottom-Left (startRect.leftPx, startRect.bottomPx)
                 val anchorX = startRect.leftPx
                 val anchorY = startRect.bottomPx
                 val availW = (vw - minMarginPx - anchorX).coerceAtLeast(minBoxW)
@@ -162,7 +159,6 @@ object ClockSpatialMath {
             }
 
             ClockGripTarget.CORNER_TL -> {
-                // Opposite corner anchored: Bottom-Right (startRect.rightPx, startRect.bottomPx)
                 val anchorX = startRect.rightPx
                 val anchorY = startRect.bottomPx
                 val availW = (anchorX - minMarginPx).coerceAtLeast(minBoxW)
@@ -226,10 +222,6 @@ object ClockSpatialMath {
         }
     }
 
-    /**
-     * Returns true once the user drags or shifts the clock horizontally away from screen center.
-     * Note: Centering is strictly horizontal so vertical placement is never accidentally reset.
-     */
     fun isOffCenterPastThreshold(
         config: ClockDesignConfig,
         centerAnchorY: Float = config.placementY
@@ -242,17 +234,11 @@ object ClockSpatialMath {
     fun isHorizontallyOffCenter(config: ClockDesignConfig): Boolean =
         kotlin.math.abs(config.offsetXFraction) > 0.015f || config.alignment != ClockHorizontalAlign.CENTER
 
-    /**
-     * Centers the clock horizontally on screen while strictly preserving vertical [ClockDesignConfig.placementY].
-     */
     fun centerClock(config: ClockDesignConfig): ClockDesignConfig = config.copy(
         offsetXFraction = 0f,
         alignment = ClockHorizontalAlign.CENTER
     )
 
-    /**
-     * Independently snaps the clock vertically and horizontally to the Depth Engine's recommended subject overlap pocket.
-     */
     fun autoSnapToDepth(
         config: ClockDesignConfig,
         targetPlacementY: Float = DEFAULT_PLACEMENT_Y,
@@ -282,11 +268,6 @@ object ClockSpatialMath {
         }
     }
 
-    /**
-     * When [ClockDesignConfig.aspectAdaptiveEnabled] is true and a corner drag stretches or compresses
-     * the bounding box across vertical / balanced / wide proportions, seamlessly transitions to the
-     * best-matching clock face while normalizing proportions so there is no harsh stretch distortion.
-     */
     fun applyAspectAdaptiveResolution(
         updatedConfig: ClockDesignConfig,
         unscaledWidthPx: Float,
@@ -315,17 +296,30 @@ object ClockSpatialMath {
                 HyperOsClockFace.CANYON_MONUMENT,
                 HyperOsClockFace.AQUA_MIST_TALL -> HyperOsClockFace.HORIZON_SILK
                 HyperOsClockFace.SWISS_GRID_SPLIT,
-                HyperOsClockFace.PIXEL_DUAL_DIAL -> HyperOsClockFace.SWISS_GRID_SPLIT
+                HyperOsClockFace.PIXEL_DUAL_DIAL,
+                HyperOsClockFace.BRUTALIST_SLAB -> HyperOsClockFace.SWISS_GRID_SPLIT
                 HyperOsClockFace.CHRONO_TELEMETRY,
-                HyperOsClockFace.KINETIC_MONO -> HyperOsClockFace.CHRONO_TELEMETRY
+                HyperOsClockFace.KINETIC_MONO,
+                HyperOsClockFace.RETRO_PIXEL_MATRIX -> HyperOsClockFace.CHRONO_TELEMETRY
+                HyperOsClockFace.ROMAN_MONUMENT,
+                HyperOsClockFace.EDITORIAL_DUO -> HyperOsClockFace.ROMAN_MONUMENT
+                HyperOsClockFace.SOLAR_ARC_GAUGE,
+                HyperOsClockFace.COMPASS_CHRONO -> HyperOsClockFace.SOLAR_ARC_GAUGE
                 else -> HyperOsClockFace.POSTER_SPLIT
             }
             ClockAspectProfile.BALANCED -> when (updatedConfig.face) {
                 HyperOsClockFace.LUXE_VOGUE,
+                HyperOsClockFace.EDITORIAL_DUO,
                 HyperOsClockFace.CALLIGRAPHY_SEAL -> HyperOsClockFace.LUXE_VOGUE
+                HyperOsClockFace.TALL_POSTER_1340,
+                HyperOsClockFace.NEON_OVERLAP -> HyperOsClockFace.TALL_POSTER_1340
                 HyperOsClockFace.ORBITAL_RING_HYBRID,
                 HyperOsClockFace.CHRONO_TELEMETRY,
                 HyperOsClockFace.ANALOG_MINIMAL -> HyperOsClockFace.ORBITAL_RING_HYBRID
+                HyperOsClockFace.COMPASS_CHRONO,
+                HyperOsClockFace.RETRO_PIXEL_MATRIX -> HyperOsClockFace.COMPASS_CHRONO
+                HyperOsClockFace.HANDWRITTEN_STAMP,
+                HyperOsClockFace.DOODLE_PLAY -> HyperOsClockFace.HANDWRITTEN_STAMP
                 HyperOsClockFace.POSTER_SPLIT,
                 HyperOsClockFace.MEADOW_BLOCK -> HyperOsClockFace.SPIRE_MONOLITH
                 else -> HyperOsClockFace.ATELIER_SERIF
@@ -335,6 +329,12 @@ object ClockSpatialMath {
                 HyperOsClockFace.CLASSIC_HORIZON -> HyperOsClockFace.CANYON_MONUMENT
                 HyperOsClockFace.AQUA_MIST_TALL,
                 HyperOsClockFace.ORBITAL_RING_HYBRID -> HyperOsClockFace.AQUA_MIST_TALL
+                HyperOsClockFace.EDITORIAL_DUO,
+                HyperOsClockFace.ROMAN_MONUMENT -> HyperOsClockFace.EDITORIAL_DUO
+                HyperOsClockFace.NEON_OVERLAP,
+                HyperOsClockFace.BRUTALIST_SLAB -> HyperOsClockFace.NEON_OVERLAP
+                HyperOsClockFace.KINETIC_STEP,
+                HyperOsClockFace.DOODLE_PLAY -> HyperOsClockFace.KINETIC_STEP
                 HyperOsClockFace.ATELIER_SERIF,
                 HyperOsClockFace.LUXE_VOGUE -> HyperOsClockFace.CALLIGRAPHY_SEAL
                 HyperOsClockFace.MEADOW_BLOCK -> HyperOsClockFace.MEADOW_BLOCK
@@ -342,7 +342,6 @@ object ClockSpatialMath {
             }
         }
 
-        // Preserve comfortable user sizing without extreme aspect skew on the newly morphed clock face
         val averageScale = ((updatedConfig.widthScale + updatedConfig.heightScale) * 0.5f)
             .coerceIn(0.82f, 1.35f)
         val dampedW = (averageScale * when (desiredProfile) {

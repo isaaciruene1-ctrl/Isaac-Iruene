@@ -100,11 +100,11 @@ class TenPartIntegrityQaTest {
         DockDestinationSpec("profile", "Profile", Icons.Filled.Person, Icons.Outlined.Person)
     )
 
-    // TEST 1: Clock Studio Exhaustive Coverage (23 faces, 5 signature modes, aspect adaptivity)
+    // TEST 1: Clock Studio Exhaustive Coverage (33 faces, 22 fonts, 5 signature modes, aspect adaptivity)
     @Test
     fun test01_clockStudioFacesFontsFinishesStretchAndFormats() {
-        assertEquals(23, HyperOsClockFace.entries.size)
-        assertEquals(12, HyperOsClockFont.entries.size)
+        assertEquals(33, HyperOsClockFace.entries.size)
+        assertEquals(22, HyperOsClockFont.entries.size)
         assertEquals(6, HyperOsClockFinish.entries.size)
         assertEquals(5, ClockSignatureMode.entries.size)
 
@@ -446,8 +446,8 @@ class TenPartIntegrityQaTest {
     // TEST 6 & 7: Catalog, Lock-Screen Sets, Logo Replacement & Zero Duplicate Splash
     @Test
     fun test06_07_catalogLockScreenSetsCollectionsAndNoDuplicateSplash() {
-        assertTrue(WallpaperCatalog.allWallpapers.size >= 2050)
-        assertEquals(11, WallpaperCategory.entries.size)
+        assertTrue(WallpaperCatalog.allWallpapers.size >= 2800)
+        assertEquals(13, WallpaperCategory.entries.size)
         val filtered = WallpaperCatalog.search(SearchFilters(amoledOnly = true, depthStudioOnly = true))
         assertTrue(filtered.isNotEmpty())
 

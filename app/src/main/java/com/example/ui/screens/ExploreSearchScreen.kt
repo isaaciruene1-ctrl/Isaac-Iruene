@@ -394,6 +394,44 @@ fun ExploreSearchScreen(
             }
         }
 
+        // Curated Discovery Collections (cleaned up, highlights Stock & Superhero)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Collections",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                val quickCollections = listOf(
+                    DiscoveryCollection.STOCK,
+                    DiscoveryCollection.SUPERHERO,
+                    DiscoveryCollection.DEPTH_STUDIO,
+                    DiscoveryCollection.FEATURED,
+                    DiscoveryCollection.AMOLED,
+                    DiscoveryCollection.ULTRA_HD_4K,
+                    DiscoveryCollection.EDITORS_PICKS,
+                    DiscoveryCollection.NEW_ARRIVALS
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(quickCollections) { col ->
+                        val selected = filters.collection == col
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSelectCollection(if (selected) null else col) },
+                            label = { Text(col.title) },
+                            colors = chipColors,
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.testTag("collection_chip_${col.name}")
+                        )
+                    }
+                }
+            }
+        }
+
         // Category Visual Cards
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
