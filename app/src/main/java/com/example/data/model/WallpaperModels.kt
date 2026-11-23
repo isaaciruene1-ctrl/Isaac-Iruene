@@ -2,10 +2,6 @@ package com.example.data.model
 
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Immutable
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.IgnoreExtraProperties
-import com.google.firebase.firestore.ServerTimestamp
 
 enum class WallpaperCategory(val displayName: String, val tagline: String) {
     NATURE("Nature", "Alpine peaks, misty forests & tranquil waters"),
@@ -23,7 +19,7 @@ enum class WallpaperCategory(val displayName: String, val tagline: String) {
 
 enum class DiscoveryCollection(val title: String, val subtitle: String) {
     FEATURED("Featured", "Curated hero canvases for your screen"),
-    TRENDING("Trending", "Most loved across BACKDROP this week"),
+    TRENDING("Trending", "Most loved across Backdrops this week"),
     EDITORS_PICKS("Editor's Picks", "Hand-selected editorial compositions"),
     NEW_ARRIVALS("New Arrivals", "Fresh high-resolution drops"),
     ULTRA_HD_4K("4K Ultra HD", "Razor-sharp 2160 × 3840+ detail"),
@@ -112,37 +108,33 @@ data class Wallpaper(
     val resolutionText: String get() = "$width × $height"
 }
 
-@IgnoreExtraProperties
 data class FavoriteDoc(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val userId: String = "",
     val wallpaperId: String = "",
-    @ServerTimestamp val createdAt: Timestamp? = null
+    val createdAt: Long? = null
 )
 
-@IgnoreExtraProperties
 data class UserCollectionDoc(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val userId: String = "",
     val name: String = "",
     val description: String = "",
     val wallpaperIds: List<String> = emptyList(),
     val coverUrl: String = "",
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    val createdAt: Long? = null,
+    val updatedAt: Long? = null
 )
 
-@IgnoreExtraProperties
 data class RecentlyViewedDoc(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val userId: String = "",
     val wallpaperId: String = "",
-    @ServerTimestamp val viewedAt: Timestamp? = null
+    val viewedAt: Long? = null
 )
 
-@IgnoreExtraProperties
 data class UserPreferencesDoc(
-    @DocumentId val id: String = "",
+    val id: String = "",
     val userId: String = "",
     val themeMode: String = ThemeMode.SYSTEM.name,
     val amoledDark: Boolean = false,
@@ -151,8 +143,11 @@ data class UserPreferencesDoc(
     val recentSearches: List<String> = emptyList(),
     val homeCategoryChipsEnabled: Boolean = false,
     val uiStyle: String = UiStyleMode.MATERIAL_3.name,
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
+    val hapticFeedbackEnabled: Boolean = true,
+    val reducedMotionEnabled: Boolean = false,
+    val glassDepthIntensity: Float = 1.0f,
+    val createdAt: Long? = null,
+    val updatedAt: Long? = null
 ) {
     val parsedThemeMode: ThemeMode
         get() = runCatching { ThemeMode.valueOf(themeMode) }.getOrDefault(ThemeMode.SYSTEM)
@@ -163,6 +158,23 @@ data class UserPreferencesDoc(
     val parsedUiStyle: UiStyleMode
         get() = runCatching { UiStyleMode.valueOf(uiStyle) }.getOrDefault(UiStyleMode.MATERIAL_3)
 }
+
+@Immutable
+data class LockScreenSetDoc(
+    val id: String = "",
+    val name: String = "",
+    val wallpaperId: String = "",
+    val customPhotoUri: String = "",
+    val clockConfigJson: String = "",
+    val zoomScale: Float = 1.0f,
+    val panOffsetX: Float = 0f,
+    val panOffsetY: Float = 0f,
+    val dimFraction: Float = 0f,
+    val lookFilterName: String = "ORIGINAL",
+    val isFavorite: Boolean = false,
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
+)
 
 enum class SearchSort {
     RELEVANT, RECENTLY_ADDED, MOST_POPULAR

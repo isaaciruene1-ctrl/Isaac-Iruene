@@ -29,5 +29,9 @@ data class DepthDetectionResult(
     val subjectPeakXFraction: Float,
     val foregroundCoverageFraction: Float,
     val processingTimeMs: Long,
-    val recommendedClockOverlapFraction: Float = 0f
+    val recommendedClockOverlapFraction: Float = 0f,
+    val recommendedWallpaperZoom: Float = 1.0f,
+    val recommendedWallpaperPanXFraction: Float = 0f,
+    val recommendedWallpaperPanYFraction: Float = 0f,
+    val recommendedClockScale: Float = 1.0f
 )

@@ -1,19 +1,20 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,26 +25,40 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import java.util.Random
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,21 +75,25 @@ import com.example.data.model.Wallpaper
 import com.example.data.model.WallpaperCategory
 import com.example.ui.components.BackdropWordmark
 import com.example.ui.components.FavoriteHeartButton
+import com.example.ui.components.TactileHudIconButton
 import com.example.ui.components.TactileSurface
 import com.example.ui.components.WallpaperAsyncImage
 import com.example.ui.components.WallpaperGridCard
 import com.example.ui.components.glassSpecularBorder
+import com.example.ui.theme.AppMotion
+import com.example.ui.theme.LocalReducedMotionFlag
 import com.example.ui.theme.LocalUiStyleMode
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    userDisplayName: String?,
     favoriteIds: Set<String>,
     isRefreshing: Boolean,
     showCategoryChips: Boolean,
+    discoverySeed: Long = 0L,
     onRefresh: () -> Unit,
+    onShuffleDiscovery: () -> Unit = {},
     onSearchShortcut: () -> Unit,
     onSettingsShortcut: () -> Unit,
     onProfileShortcut: () -> Unit,
@@ -85,24 +104,73 @@ fun HomeScreen(
     onOpenDepthStudio: (Wallpaper) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
-    val featured = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.FEATURED).take(6) }
-    val trending = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.TRENDING).take(10) }
-    val editorsPicks = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.EDITORS_PICKS).take(6) }
-    val newArrivals = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.NEW_ARRIVALS).take(10) }
-    val depthStudio = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.DEPTH_STUDIO).take(8) }
-    val amoled = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.AMOLED).take(10) }
-    val ultraHd = remember { WallpaperCatalog.getForCollection(DiscoveryCollection.ULTRA_HD_4K).take(10) }
+    val uiStyle = LocalUiStyleMode.current
+    val reducedMotion = LocalReducedMotionFlag.current
+    val isGlass = uiStyle == UiStyleMode.FROSTED_GLASS_OS
+    val totalCatalogCount = remember { WallpaperCatalog.allWallpapers.size }
 
-    val greeting = remember(userDisplayName) {
+    val featured = remember(discoverySeed) {
+        val rng = Random(discoverySeed)
+        val featuredPool = WallpaperCatalog.getForCollection(DiscoveryCollection.FEATURED)
+        val diverseByCategory = WallpaperCategory.entries.mapNotNull { cat ->
+            featuredPool.filter { it.category == cat }.shuffled(rng).firstOrNull()
+                ?: WallpaperCatalog.allWallpapers.filter { it.category == cat }.shuffled(rng).firstOrNull()
+        }.shuffled(rng)
+        diverseByCategory.take(6)
+    }
+    val trending = remember(discoverySeed) {
+        WallpaperCatalog.getForCollection(DiscoveryCollection.TRENDING)
+            .let { base ->
+                val expanded = (base + WallpaperCatalog.allWallpapers.sortedByDescending { it.popularityScore }.take(36)).distinctBy { it.id }
+                expanded.shuffled(Random(discoverySeed + 3L)).take(12)
+            }
+    }
+    val editorsPicks = remember(discoverySeed) {
+        WallpaperCatalog.getForCollection(DiscoveryCollection.EDITORS_PICKS)
+            .shuffled(Random(discoverySeed + 2L))
+            .take(6)
+    }
+    val newArrivals = remember(discoverySeed) {
+        WallpaperCatalog.allWallpapers
+            .sortedByDescending { it.addedOrder }
+            .take(40)
+            .shuffled(Random(discoverySeed + 5L))
+            .take(12)
+    }
+    val depthStudio = remember(discoverySeed) {
+        WallpaperCatalog.getForCollection(DiscoveryCollection.DEPTH_STUDIO)
+            .shuffled(Random(discoverySeed + 1L))
+            .take(10)
+    }
+    val amoled = remember(discoverySeed) {
+        WallpaperCatalog.getForCollection(DiscoveryCollection.AMOLED)
+            .shuffled(Random(discoverySeed + 4L))
+            .take(12)
+    }
+    val ultraHd = remember(discoverySeed) {
+        WallpaperCatalog.getForCollection(DiscoveryCollection.ULTRA_HD_4K)
+            .shuffled(Random(discoverySeed + 6L))
+            .take(12)
+    }
+
+    val greeting = remember {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val timeGreeting = when (hour) {
+        when (hour) {
             in 5..11 -> "Good morning"
             in 12..16 -> "Good afternoon"
             else -> "Good evening"
         }
-        val first = userDisplayName?.trim()?.substringBefore(" ")?.takeIf { it.isNotBlank() }
-        if (first != null) "$timeGreeting, $first" else timeGreeting
+    }
+
+    val dynamicMoodLine = remember(discoverySeed) {
+        val moods = listOf(
+            "Freshly curated from $totalCatalogCount+ 4K canvases",
+            "Live studio mix • 95+ pieces per category",
+            "Pull down or tap Shuffle anytime for a new vibe",
+            "Architectural calm, OLED obsidian & natural depth"
+        )
+        val idx = ((discoverySeed and 0x7FFFFFFFL) % moods.size).toInt()
+        moods[idx]
     }
 
     PullToRefreshBox(
@@ -122,70 +190,140 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
+                    var overflowExpanded by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         BackdropWordmark(markSize = 28.dp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.72f else 1f),
-                                shape = CircleShape,
-                                border = glassSpecularBorder(),
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                IconButton(
-                                    onClick = onSearchShortcut,
-                                    modifier = Modifier.testTag("home_search_button")
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TactileHudIconButton(
+                                icon = Icons.Rounded.Shuffle,
+                                contentDescription = "Shuffle featured scenes",
+                                onClick = onShuffleDiscovery,
+                                modifier = Modifier.testTag("home_shuffle_button")
+                            )
+
+                            Box {
+                                TactileHudIconButton(
+                                    icon = Icons.Rounded.MoreVert,
+                                    contentDescription = "Open menu",
+                                    onClick = { overflowExpanded = true },
+                                    active = overflowExpanded,
+                                    modifier = Modifier.testTag("home_overflow_menu_button")
+                                )
+
+                                DropdownMenu(
+                                    expanded = overflowExpanded,
+                                    onDismissRequest = { overflowExpanded = false },
+                                    shape = RoundedCornerShape(22.dp),
+                                    containerColor = if (isGlass) {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    },
+                                    border = glassSpecularBorder(),
+                                    tonalElevation = if (isGlass) 0.dp else 4.dp,
+                                    shadowElevation = if (isGlass) 12.dp else 4.dp,
+                                    modifier = Modifier.testTag("home_overflow_dropdown")
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Search,
-                                        contentDescription = "Search wallpapers"
+                                    val menuColors = MenuDefaults.itemColors(
+                                        textColor = MaterialTheme.colorScheme.onSurface,
+                                        leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                }
-                            }
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.72f else 1f),
-                                shape = CircleShape,
-                                border = glassSpecularBorder(),
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                IconButton(
-                                    onClick = onSettingsShortcut,
-                                    modifier = Modifier.testTag("home_settings_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Settings,
-                                        contentDescription = "Open Studio Settings"
+                                    DropdownMenuItem(
+                                        text = { Text("Search Wallpapers") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Search,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        colors = menuColors,
+                                        onClick = {
+                                            overflowExpanded = false
+                                            onSearchShortcut()
+                                        },
+                                        modifier = Modifier.testTag("home_search_button")
                                     )
-                                }
-                            }
-                            Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isGlass) 0.82f else 1f),
-                                shape = CircleShape,
-                                border = glassSpecularBorder(),
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                IconButton(
-                                    onClick = onProfileShortcut,
-                                    modifier = Modifier.testTag("home_profile_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Person,
-                                        contentDescription = "Open profile and settings",
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    DropdownMenuItem(
+                                        text = { Text("Studio Settings") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Settings,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        colors = menuColors,
+                                        onClick = {
+                                            overflowExpanded = false
+                                            onSettingsShortcut()
+                                        },
+                                        modifier = Modifier.testTag("home_settings_button")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Profile & Library") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Person,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        colors = menuColors,
+                                        onClick = {
+                                            overflowExpanded = false
+                                            onProfileShortcut()
+                                        },
+                                        modifier = Modifier.testTag("home_profile_button")
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Refresh Feed") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Refresh,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        colors = menuColors,
+                                        onClick = {
+                                            overflowExpanded = false
+                                            onRefresh()
+                                        },
+                                        modifier = Modifier.testTag("home_refresh_menu_item")
                                     )
                                 }
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "$greeting • YOUR SCREEN. YOUR CANVAS.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    AnimatedContent(
+                        targetState = "$greeting • $dynamicMoodLine",
+                        transitionSpec = {
+                            if (reducedMotion) {
+                                fadeIn(tween(120)) togetherWith fadeOut(tween(100))
+                            } else if (isGlass) {
+                                AppMotion.screenEnter(uiStyle, reducedMotion = false) togetherWith
+                                    AppMotion.screenExit(uiStyle, reducedMotion = false)
+                            } else {
+                                fadeIn(tween(240)) togetherWith fadeOut(tween(170))
+                            }
+                        },
+                        label = "home_greeting_line"
+                    ) { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -209,8 +347,8 @@ fun HomeScreen(
                     }
                     AnimatedVisibility(
                         visible = showCategoryChips,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+                        enter = AppMotion.drawerEnter(uiStyle, reducedMotion),
+                        exit = AppMotion.drawerExit(uiStyle, reducedMotion)
                     ) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 20.dp),
@@ -222,6 +360,11 @@ fun HomeScreen(
                                     selected = false,
                                     onClick = { onSelectCategory(category) },
                                     label = { Text(label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = if (isGlass) MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
+                                        else MaterialTheme.colorScheme.surfaceContainerLow,
+                                        labelColor = MaterialTheme.colorScheme.onSurface
+                                    ),
                                     shape = RoundedCornerShape(50),
                                     modifier = Modifier.testTag("home_category_chip_${category.name}")
                                 )
@@ -233,25 +376,52 @@ fun HomeScreen(
 
             // Featured Carousel
             item {
-                val pagerState = rememberPagerState(pageCount = { featured.size })
+                val pagerState = rememberPagerState(pageCount = { featured.size.coerceAtLeast(1) })
+                var previousSeed by remember { mutableStateOf(discoverySeed) }
+                LaunchedEffect(discoverySeed) {
+                    if (previousSeed != discoverySeed) {
+                        previousSeed = discoverySeed
+                        if (pagerState.currentPage != 0) {
+                            pagerState.animateScrollToPage(
+                                page = 0,
+                                animationSpec = tween(durationMillis = 350)
+                            )
+                        }
+                    }
+                }
+                LaunchedEffect(discoverySeed, pagerState.settledPage) {
+                    if (featured.size > 1) {
+                        delay(5600L)
+                        val nextPage = (pagerState.settledPage + 1) % featured.size
+                        pagerState.animateScrollToPage(
+                            page = nextPage,
+                            animationSpec = tween(durationMillis = 600)
+                        )
+                    }
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionHeader(
                         title = "Featured Canvases",
-                        subtitle = "Hand-picked high-resolution studio drops",
+                        subtitle = "Rotating high-resolution studio drops across categories",
                         onSeeAll = { onOpenCollection(DiscoveryCollection.FEATURED) }
                     )
-                    HorizontalPager(
-                        state = pagerState,
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        pageSpacing = 14.dp
-                    ) { page ->
-                        val wp = featured[page]
-                        FeaturedHeroCard(
-                            wallpaper = wp,
-                            isFavorite = wp.id in favoriteIds,
-                            onClick = { onOpenWallpaper(wp) },
-                            onFavoriteToggle = { onToggleFavorite(wp.id) }
-                        )
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val isWide = maxWidth >= 600.dp
+                        HorizontalPager(
+                            state = pagerState,
+                            pageSize = if (isWide) PageSize.Fixed(390.dp) else PageSize.Fill,
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            pageSpacing = 14.dp
+                        ) { page ->
+                            featured.getOrNull(page)?.let { wp ->
+                                FeaturedHeroCard(
+                                    wallpaper = wp,
+                                    isFavorite = wp.id in favoriteIds,
+                                    onClick = { onOpenWallpaper(wp) },
+                                    onFavoriteToggle = { onToggleFavorite(wp.id) }
+                                )
+                            }
+                        }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -355,28 +525,31 @@ fun HomeScreen(
                         subtitle = "Soft pastel tones & architectural calm",
                         onSeeAll = { onOpenCollection(DiscoveryCollection.EDITORS_PICKS) }
                     )
-                    Column(
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        editorsPicks.chunked(2).forEachIndexed { rowIdx, pair ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                pair.forEachIndexed { colIdx, wp ->
-                                    val ratio = if ((rowIdx + colIdx) % 2 == 0) 0.68f else 0.78f
-                                    WallpaperGridCard(
-                                        wallpaper = wp,
-                                        isFavorite = wp.id in favoriteIds,
-                                        onClick = { onOpenWallpaper(wp) },
-                                        onFavoriteToggle = { onToggleFavorite(wp.id) },
-                                        aspectRatio = ratio,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                if (pair.size == 1) {
-                                    Spacer(modifier = Modifier.weight(1f))
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val columns = if (maxWidth >= 680.dp) 3 else 2
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            editorsPicks.chunked(columns).forEachIndexed { rowIdx, rowItems ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    rowItems.forEachIndexed { colIdx, wp ->
+                                        val ratio = if ((rowIdx + colIdx) % 2 == 0) 0.68f else 0.78f
+                                        WallpaperGridCard(
+                                            wallpaper = wp,
+                                            isFavorite = wp.id in favoriteIds,
+                                            onClick = { onOpenWallpaper(wp) },
+                                            onFavoriteToggle = { onToggleFavorite(wp.id) },
+                                            aspectRatio = ratio,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    repeat(columns - rowItems.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
@@ -389,7 +562,7 @@ fun HomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionHeader(
                         title = "Trending Now",
-                        subtitle = "Community favorites across 220+ artworks",
+                        subtitle = "Community favorites across $totalCatalogCount+ artworks",
                         onSeeAll = { onOpenCollection(DiscoveryCollection.TRENDING) }
                     )
                     HorizontalWallpaperCarousel(
@@ -511,7 +684,7 @@ private fun FeaturedHeroCard(
             WallpaperAsyncImage(
                 wallpaper = wallpaper,
                 useFullRes = false,
-                contentDescription = "${wallpaper.title} featured wallpaper",
+                contentDescription = "${wallpaper.category.displayName} featured wallpaper",
                 modifier = Modifier.fillMaxSize()
             )
             Box(
@@ -556,21 +729,16 @@ private fun FeaturedHeroCard(
                     .padding(20.dp)
             ) {
                 Text(
-                    text = wallpaper.category.displayName.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.85f)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = wallpaper.title,
-                    style = MaterialTheme.typography.headlineMedium,
+                    text = wallpaper.category.displayName,
+                    style = MaterialTheme.typography.headlineSmall,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = wallpaper.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.86f),
+                    color = Color.White.copy(alpha = 0.88f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

@@ -1,13 +1,11 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -43,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -57,7 +56,10 @@ import coil.request.ImageRequest
 import com.example.data.media.BackdropImageLoader
 import com.example.data.model.UiStyleMode
 import com.example.data.model.Wallpaper
+import com.example.ui.theme.AppMotion
+import com.example.ui.theme.LocalReducedMotionFlag
 import com.example.ui.theme.LocalUiStyleMode
+import com.example.ui.theme.rememberStudioHaptics
 
 @Composable
 fun ShimmerBox(modifier: Modifier = Modifier) {
@@ -84,13 +86,15 @@ fun WallpaperAsyncImage(
     useFullRes: Boolean,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    colorFilter: ColorFilter? = null
 ) {
     if (wallpaper.isBundledAsset) {
         Image(
             painter = painterResource(id = wallpaper.fallbackResId),
             contentDescription = contentDescription,
             contentScale = contentScale,
+            colorFilter = colorFilter,
             modifier = modifier
         )
         return
@@ -110,6 +114,7 @@ fun WallpaperAsyncImage(
         imageLoader = BackdropImageLoader.get(context),
         contentDescription = contentDescription,
         contentScale = contentScale,
+        colorFilter = colorFilter,
         modifier = modifier,
         loading = {
             ShimmerBox(modifier = Modifier.fillMaxSize())
@@ -119,6 +124,7 @@ fun WallpaperAsyncImage(
                 painter = painterResource(id = wallpaper.fallbackResId),
                 contentDescription = contentDescription,
                 contentScale = contentScale,
+                colorFilter = colorFilter,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -132,16 +138,19 @@ fun FavoriteHeartButton(
     modifier: Modifier = Modifier,
     containerColor: Color = Color.Black.copy(alpha = 0.36f)
 ) {
+    val uiStyle = LocalUiStyleMode.current
+    val reducedMotion = LocalReducedMotionFlag.current
+    val haptics = rememberStudioHaptics()
     val scale by animateFloatAsState(
-        targetValue = if (isFavorite) 1.16f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        targetValue = if (isFavorite && !reducedMotion) {
+            if (uiStyle == UiStyleMode.FROSTED_GLASS_OS) 1.22f else 1.12f
+        } else 1f,
+        animationSpec = AppMotion.emphasisSpring(uiStyle, reducedMotion),
         label = "heart_scale"
     )
     val tint by animateColorAsState(
         targetValue = if (isFavorite) Color(0xFFFF8095) else Color.White,
+        animationSpec = AppMotion.colorSpec(uiStyle, reducedMotion),
         label = "heart_tint"
     )
     Surface(
@@ -150,7 +159,10 @@ fun FavoriteHeartButton(
         modifier = modifier.size(48.dp)
     ) {
         IconButton(
-            onClick = onToggle,
+            onClick = {
+                haptics.performTick(25L)
+                onToggle()
+            },
             modifier = Modifier.fillMaxSize()
         ) {
             Icon(
@@ -192,7 +204,7 @@ fun WallpaperGridCard(
             WallpaperAsyncImage(
                 wallpaper = wallpaper,
                 useFullRes = false,
-                contentDescription = "${wallpaper.title} wallpaper",
+                contentDescription = "${wallpaper.category.displayName} wallpaper",
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -262,13 +274,16 @@ fun WallpaperGridCard(
                 )
             }
 
-            Column(
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(14.dp)
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = wallpaper.title,
+                    text = wallpaper.category.displayName,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
@@ -276,8 +291,8 @@ fun WallpaperGridCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = wallpaper.category.displayName,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = wallpaper.aspectRatio,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.8f),
                     maxLines = 1
                 )
@@ -294,8 +309,8 @@ fun EmptyStatePanel(
     onAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    TactileSurface(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(28.dp),
         modifier = modifier.fillMaxWidth()
     ) {

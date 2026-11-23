@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "BACKDROP"
+rootProject.name = "Backdrops"
 
 include(":app")

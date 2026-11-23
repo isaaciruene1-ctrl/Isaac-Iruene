@@ -1,41 +1,42 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.HighQuality
 import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.NetworkCheck
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,27 +71,30 @@ import com.example.data.model.UiStyleMode
 import com.example.data.model.UserPreferencesDoc
 import com.example.ui.components.BackdropLogoMark
 import com.example.ui.components.TactileSurface
+import com.example.ui.components.glassSpecularBorder
+import com.example.ui.theme.AppMotion
+import com.example.ui.theme.LocalReducedMotionFlag
 import com.example.ui.theme.LocalUiStyleMode
-import com.example.ui.viewmodel.AiDiagnosticState
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPanelScreen(
     preferences: UserPreferencesDoc,
     cacheBytes: Long,
-    diagnosticState: AiDiagnosticState,
     onBack: () -> Unit,
     onUiStyleChange: (UiStyleMode) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onAmoledDarkChange: (Boolean) -> Unit,
     onHomeCategoryChipsChange: (Boolean) -> Unit,
+    onHapticFeedbackChange: (Boolean) -> Unit = {},
+    onReducedMotionChange: (Boolean) -> Unit = {},
+    onGlassDepthIntensityChange: (Float) -> Unit = {},
     onImageQualityChange: (ImageQualityPref) -> Unit,
     onWifiOnlyChange: (Boolean) -> Unit,
     onRefreshCacheSize: () -> Unit,
     onClearCache: () -> Unit,
-    onRunAiDiagnostic: () -> Unit,
-    onOpenAiStudio: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
@@ -106,14 +110,19 @@ fun SettingsPanelScreen(
             else -> String.format(Locale.US, "%.1f MB", cacheBytes / (1024f * 1024f))
         }
     }
+    val totalCount = remember { WallpaperCatalog.allWallpapers.size }
 
     Scaffold(
         containerColor = if (isGlass) Color.Transparent else MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
+                    containerColor = Color.Transparent,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 navigationIcon = {
                     IconButton(
@@ -124,7 +133,8 @@ fun SettingsPanelScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Navigate back"
+                            contentDescription = "Navigate back",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
@@ -133,7 +143,8 @@ fun SettingsPanelScreen(
                         Text(
                             text = "Studio Settings",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = preferences.parsedUiStyle.label,
@@ -148,465 +159,491 @@ fun SettingsPanelScreen(
             .fillMaxSize()
             .testTag("settings_panel_screen")
     ) { innerPadding ->
-        LazyColumn(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(innerPadding)
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.displayCutout)),
+            contentAlignment = Alignment.TopCenter
         ) {
-            // Interface Style Switcher: Material 3 vs Frosted Glass OS
-            item {
-                TactileSurface(
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Layers,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Column {
-                                Text(
-                                    text = "Interface Design System",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Switch between Material 3 and Tactile Frosted Glass OS",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+            val isWide = maxWidth >= 680.dp
+            LazyColumn(
+                modifier = Modifier
+                    .widthIn(max = 980.dp)
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                // Interface Style Switcher: Material 3 vs Frosted Glass OS
+                item {
+                    InterfaceStyleSwitcherCard(
+                        currentStyle = preferences.parsedUiStyle,
+                        glassDepthIntensity = preferences.glassDepthIntensity,
+                        onUiStyleChange = onUiStyleChange,
+                        onGlassDepthIntensityChange = onGlassDepthIntensityChange
+                    )
+                }
 
+                if (isWide) {
+                    item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            UiStyleMode.entries.forEach { mode ->
-                                UiStyleOptionCard(
-                                    mode = mode,
-                                    selected = preferences.parsedUiStyle == mode,
-                                    onClick = { onUiStyleChange(mode) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // AI Studio & Diagnostics
-            item {
-                TactileSurface(
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Gemini AI Studio & Diagnostics",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Firebase AI Logic + App Check + Model Fallback Chain",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (isGlass) 0.65f else 1f),
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
                             Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(18.dp)
                             ) {
-                                Text(
-                                    text = "Active Fallback Routing",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
+                                AppearanceLayoutCard(
+                                    preferences = preferences,
+                                    onThemeModeChange = onThemeModeChange,
+                                    onAmoledDarkChange = onAmoledDarkChange,
+                                    onHomeCategoryChipsChange = onHomeCategoryChipsChange,
+                                    onHapticFeedbackChange = onHapticFeedbackChange,
+                                    onReducedMotionChange = onReducedMotionChange
                                 )
-                                Text(
-                                    text = "Chat & Vision: gemini-3.8-flash → 3.5-flash-lite → 4-argon",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Artwork: nano-banana-2.1 → 3.1-flash-lite-image → 3-pro-image",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                StorageAboutCard(
+                                    cacheLabel = cacheLabel,
+                                    totalCount = totalCount,
+                                    onClearCache = onClearCache
                                 )
                             }
-                        }
-
-                        when (diagnosticState) {
-                            AiDiagnosticState.Idle -> Unit
-                            AiDiagnosticState.Checking -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                        Text(
-                                            text = "Testing Firebase AI Logic & App Check attestation...",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
-                            }
-                            is AiDiagnosticState.Healthy -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.CheckCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Healthy • ${diagnosticState.modelUsed} (${diagnosticState.latencyMs}ms)",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                                            )
-                                            Text(
-                                                text = diagnosticState.message,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            is AiDiagnosticState.Issue -> {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.errorContainer,
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.Top,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ErrorOutline,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                        Text(
-                                            text = diagnosticState.message,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            FilledTonalButton(
-                                onClick = onRunAiDiagnostic,
-                                enabled = diagnosticState !is AiDiagnosticState.Checking,
-                                shape = RoundedCornerShape(50),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("ai_health_check_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.NetworkCheck,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Test Gemini", maxLines = 1)
-                            }
-                            Button(
-                                onClick = onOpenAiStudio,
-                                shape = RoundedCornerShape(50),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("settings_open_ai_studio_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Open Studio", maxLines = 1)
-                            }
+                            DownloadsResolutionCard(
+                                preferences = preferences,
+                                isGlass = isGlass,
+                                onImageQualityChange = onImageQualityChange,
+                                onWifiOnlyChange = onWifiOnlyChange,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
-                }
-            }
-
-            // Appearance & Home Feed Controls
-            item {
-                TactileSurface(
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "Appearance & Layout",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                } else {
+                    item {
+                        AppearanceLayoutCard(
+                            preferences = preferences,
+                            onThemeModeChange = onThemeModeChange,
+                            onAmoledDarkChange = onAmoledDarkChange,
+                            onHomeCategoryChipsChange = onHomeCategoryChipsChange,
+                            onHapticFeedbackChange = onHapticFeedbackChange,
+                            onReducedMotionChange = onReducedMotionChange
                         )
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            val modes = listOf(
-                                ThemeMode.SYSTEM to "System",
-                                ThemeMode.LIGHT to "Light",
-                                ThemeMode.DARK to "Dark"
-                            )
-                            modes.forEachIndexed { idx, (mode, label) ->
-                                SegmentedButton(
-                                    selected = preferences.parsedThemeMode == mode,
-                                    onClick = { onThemeModeChange(mode) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = idx, count = modes.size),
-                                    modifier = Modifier.testTag("settings_theme_mode_${mode.name}")
-                                ) {
-                                    Text(label)
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.DarkMode, contentDescription = null)
-                                Column {
-                                    Text("AMOLED Pitch Black", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        "True #000000 backdrop when dark theme is active",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = preferences.amoledDark,
-                                onCheckedChange = onAmoledDarkChange,
-                                modifier = Modifier.testTag("settings_amoled_switch")
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.FilterList, contentDescription = null)
-                                Column {
-                                    Text("Home Category Chips", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        "Pin category pills below the Home greeting",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = preferences.homeCategoryChipsEnabled,
-                                onCheckedChange = onHomeCategoryChipsChange,
-                                modifier = Modifier.testTag("settings_chips_switch")
-                            )
-                        }
                     }
-                }
-            }
-
-            // Downloads & Quality
-            item {
-                TactileSurface(
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "Downloads & Resolution",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                    item {
+                        DownloadsResolutionCard(
+                            preferences = preferences,
+                            isGlass = isGlass,
+                            onImageQualityChange = onImageQualityChange,
+                            onWifiOnlyChange = onWifiOnlyChange
                         )
-                        ImageQualityPref.entries.forEach { pref ->
-                            val selected = preferences.parsedImageQuality == pref
-                            Surface(
-                                color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (isGlass) 0.6f else 1f),
-                                shape = RoundedCornerShape(18.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .clickable { onImageQualityChange(pref) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(Icons.Rounded.HighQuality, contentDescription = null)
-                                    Column {
-                                        Text(pref.label, style = MaterialTheme.typography.titleSmall)
-                                        Text(
-                                            pref.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                    }
+                    item {
+                        StorageAboutCard(
+                            cacheLabel = cacheLabel,
+                            totalCount = totalCount,
+                            onClearCache = onClearCache
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.Wifi, contentDescription = null)
-                                Column {
-                                    Text("Wi-Fi Only Downloads", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        "Protect mobile data on 4K architecture packs",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = preferences.wifiOnlyDownloads,
-                                onCheckedChange = onWifiOnlyChange
+@Composable
+private fun InterfaceStyleSwitcherCard(
+    currentStyle: UiStyleMode,
+    glassDepthIntensity: Float,
+    onUiStyleChange: (UiStyleMode) -> Unit,
+    onGlassDepthIntensityChange: (Float) -> Unit
+) {
+    val reducedMotion = LocalReducedMotionFlag.current
+    TactileSurface(
+        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Layers,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Column {
+                    Text(
+                        text = "Interface Design System",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Applies everywhere — Home, Detail, Preview Studio & Depth Studio",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                UiStyleMode.entries.forEach { mode ->
+                    UiStyleOptionCard(
+                        mode = mode,
+                        selected = currentStyle == mode,
+                        onClick = { onUiStyleChange(mode) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = currentStyle == UiStyleMode.FROSTED_GLASS_OS,
+                enter = AppMotion.drawerEnter(currentStyle, reducedMotion),
+                exit = AppMotion.drawerExit(currentStyle, reducedMotion)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Contextual Liquid Glass Tuning",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    StudioParamSlider(
+                        label = "Glass",
+                        valueText = "${(glassDepthIntensity * 100).roundToInt()}%",
+                        value = glassDepthIntensity,
+                        valueRange = 0.55f..1.45f,
+                        onValueChange = onGlassDepthIntensityChange,
+                        sliderTag = "settings_glass_depth_slider"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppearanceLayoutCard(
+    preferences: UserPreferencesDoc,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onAmoledDarkChange: (Boolean) -> Unit,
+    onHomeCategoryChipsChange: (Boolean) -> Unit,
+    onHapticFeedbackChange: (Boolean) -> Unit,
+    onReducedMotionChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TactileSurface(
+        shape = RoundedCornerShape(28.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Appearance & Layout",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val modes = listOf(
+                    ThemeMode.SYSTEM to "System",
+                    ThemeMode.LIGHT to "Light",
+                    ThemeMode.DARK to "Dark"
+                )
+                modes.forEachIndexed { idx, (mode, label) ->
+                    SegmentedButton(
+                        selected = preferences.parsedThemeMode == mode,
+                        onClick = { onThemeModeChange(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index = idx, count = modes.size),
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            activeContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f),
+                            inactiveContentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.testTag("settings_theme_mode_${mode.name}")
+                    ) {
+                        Text(label)
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Rounded.DarkMode, contentDescription = null)
+                    Column {
+                        Text("AMOLED Pitch Black", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "True #000000 backdrop when dark theme is active",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Switch(
+                    checked = preferences.amoledDark,
+                    onCheckedChange = onAmoledDarkChange,
+                    modifier = Modifier.testTag("settings_amoled_switch")
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Rounded.FilterList, contentDescription = null)
+                    Column {
+                        Text("Home Category Chips", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Pin category pills below the Home greeting",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Switch(
+                    checked = preferences.homeCategoryChipsEnabled,
+                    onCheckedChange = onHomeCategoryChipsChange,
+                    modifier = Modifier.testTag("settings_chips_switch")
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Rounded.TouchApp, contentDescription = null)
+                    Column {
+                        Text("Tactile Haptics", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Subtle feedback on nav pill drag, sliders & depth snaps",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Switch(
+                    checked = preferences.hapticFeedbackEnabled,
+                    onCheckedChange = onHapticFeedbackChange,
+                    modifier = Modifier.testTag("settings_haptics_switch")
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Rounded.Animation, contentDescription = null)
+                    Column {
+                        Text("Reduced Motion", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Calm, minimal transitions across tabs and studio drawers",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Switch(
+                    checked = preferences.reducedMotionEnabled,
+                    onCheckedChange = onReducedMotionChange,
+                    modifier = Modifier.testTag("settings_reduced_motion_switch")
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadsResolutionCard(
+    preferences: UserPreferencesDoc,
+    isGlass: Boolean,
+    onImageQualityChange: (ImageQualityPref) -> Unit,
+    onWifiOnlyChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TactileSurface(
+        shape = RoundedCornerShape(28.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Downloads & Resolution",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            ImageQualityPref.entries.forEach { pref ->
+                val selected = preferences.parsedImageQuality == pref
+                Surface(
+                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.84f else 1f),
+                    contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.onSurface,
+                    shape = RoundedCornerShape(18.dp),
+                    border = glassSpecularBorder(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable { onImageQualityChange(pref) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.HighQuality,
+                            contentDescription = null,
+                            tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                pref.label,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                pref.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
 
-            // Storage & About
-            item {
-                TactileSurface(
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.CleaningServices, contentDescription = null)
-                                Column {
-                                    Text("Artwork Preview Cache", style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        "Using $cacheLabel on device",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            OutlinedButton(
-                                onClick = onClearCache,
-                                modifier = Modifier.testTag("settings_clear_cache_button")
-                            ) {
-                                Text("Clear")
-                            }
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            BackdropLogoMark(size = 28.dp)
-                            Column {
-                                Text(
-                                    text = "BACKDROP Studio • ${WallpaperCatalog.allWallpapers.size} Canvases",
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Text(
-                                    text = "220+ 4K photography & architectural minimalism • Depth Engine",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+                    Icon(Icons.Rounded.Wifi, contentDescription = null)
+                    Column {
+                        Text("Wi-Fi Only Downloads", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Protect mobile data on 4K architecture packs",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
+                }
+                Switch(
+                    checked = preferences.wifiOnlyDownloads,
+                    onCheckedChange = onWifiOnlyChange
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StorageAboutCard(
+    cacheLabel: String,
+    totalCount: Int,
+    onClearCache: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TactileSurface(
+        shape = RoundedCornerShape(28.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Rounded.CleaningServices, contentDescription = null)
+                    Column {
+                        Text("Artwork Preview Cache", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Using $cacheLabel on device",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = onClearCache,
+                    modifier = Modifier.testTag("settings_clear_cache_button")
+                ) {
+                    Text("Clear")
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BackdropLogoMark(size = 28.dp)
+                Column {
+                    Text(
+                        text = "Backdrops Studio • $totalCount Canvases",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "$totalCount+ 4K photography & minimalist packs • On-device Depth Engine",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -626,15 +663,18 @@ private fun UiStyleOptionCard(
     )
     val bgColor by animateColorAsState(
         targetValue = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f)
         } else {
-            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f)
+            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.84f)
         },
         label = "ui_style_bg"
     )
+    val labelColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    val subColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.84f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         color = bgColor,
+        contentColor = labelColor,
         shape = RoundedCornerShape(22.dp),
         border = BorderStroke(if (selected) 2.dp else 1.dp, borderColor),
         modifier = modifier
@@ -647,7 +687,6 @@ private fun UiStyleOptionCard(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Mini UI schematic preview
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -657,9 +696,9 @@ private fun UiStyleOptionCard(
                         if (mode == UiStyleMode.FROSTED_GLASS_OS) {
                             Brush.linearGradient(
                                 listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f),
-                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.30f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.42f),
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.30f),
+                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.36f)
                                 )
                             )
                         } else {
@@ -700,18 +739,18 @@ private fun UiStyleOptionCard(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Surface(
-                            color = Color.White.copy(alpha = 0.45f),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f),
                             shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.75f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier
                                 .fillMaxWidth(0.75f)
                                 .height(18.dp)
                                 .align(Alignment.Start)
                         ) {}
                         Surface(
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
                             shape = CircleShape,
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier
                                 .fillMaxWidth(0.88f)
                                 .height(16.dp)
@@ -725,13 +764,14 @@ private fun UiStyleOptionCard(
                     text = mode.label,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    color = labelColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = mode.subtitle,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = subColor,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

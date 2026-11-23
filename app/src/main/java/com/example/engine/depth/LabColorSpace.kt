@@ -134,15 +134,115 @@ internal object LabColorSpace {
     }
 
     /**
-     * Chooses a crisp, high-contrast clock color hex tuned to the sky/backdrop luminance behind the clock.
+     * Converts CIE L*a*b* into gamut-clamped sRGB ARGB (0xFFRRGGBB), proportionally scaling chroma
+     * if out of sRGB gamut so the atmospheric hue angle remains pure without channel clipping.
      */
-    fun pickHighContrastClockHex(avgSkyL: Float, avgSkyA: Float, avgSkyB: Float): String {
-        return when {
-            avgSkyL >= 76f -> "#181922" // Very bright snow/alabaster/pastel sky -> deep charcoal ink
-            avgSkyL >= 62f -> "#231F2B" // Mid-bright daylight/cream sky -> rich slate charcoal
-            avgSkyB < -12f && avgSkyL < 38f -> "#F2F5FF" // Deep twilight blue -> crisp cool ice-white
-            avgSkyA > 10f && avgSkyL < 45f -> "#FFF4EC" // Warm dusk/rose sky -> soft warm ivory
-            else -> "#FFFFFF"
+    fun labToSrgbArgb(lStar: Float, aStar: Float, bStar: Float): Int {
+        var scale = 1.0f
+        var lo = 0f
+        var hi = 1f
+        val fy = (lStar.coerceIn(0f, 100f) + 16f) / 116f
+
+        fun labToLinearRgb(a: Float, b: Float): Triple<Float, Float, Float> {
+            val fx = a / 500f + fy
+            val fz = fy - b / 200f
+            fun fInv(t: Float): Float {
+                val t3 = t * t * t
+                return if (t3 > LAB_EPSILON) t3 else (116f * t - 16f) / LAB_KAPPA
+            }
+            val x = fInv(fx) * 0.95047f
+            val y = fInv(fy) * 1.00000f
+            val z = fInv(fz) * 1.08883f
+
+            val r = 3.2404542f * x - 1.5371385f * y - 0.4985314f * z
+            val g = -0.9692660f * x + 1.8760108f * y + 0.0415560f * z
+            val bl = 0.0556434f * x - 0.2040259f * y + 1.0572252f * z
+            return Triple(r, g, bl)
         }
+
+        val (r0, g0, b0) = labToLinearRgb(aStar, bStar)
+        if (r0 < 0f || r0 > 1f || g0 < 0f || g0 > 1f || b0 < 0f || b0 > 1f) {
+            repeat(12) {
+                val mid = (lo + hi) * 0.5f
+                val (rm, gm, bm) = labToLinearRgb(aStar * mid, bStar * mid)
+                if (rm in 0f..1f && gm in 0f..1f && bm in 0f..1f) {
+                    lo = mid
+                } else {
+                    hi = mid
+                }
+            }
+            scale = lo
+        }
+
+        val (rLin, gLin, bLin) = labToLinearRgb(aStar * scale, bStar * scale)
+        fun linearToSrgb8(lin: Float): Int {
+            val c = lin.coerceIn(0f, 1f)
+            val s = if (c <= 0.0031308f) 12.92f * c else (1.055f * c.toDouble().pow(1.0 / 2.4).toFloat() - 0.055f)
+            return (s * 255f + 0.5f).toInt().coerceIn(0, 255)
+        }
+        val r8 = linearToSrgb8(rLin)
+        val g8 = linearToSrgb8(gLin)
+        val b8 = linearToSrgb8(bLin)
+        return (0xFF shl 24) or (r8 shl 16) or (g8 shl 8) or b8
+    }
+
+    /**
+     * Derives a crisp yet organic background-matched primary clock color in CIE L*a*b*.
+     * Retains calibrated atmospheric sky tint so numerals naturally harmonize with the wallpaper
+     * rather than looking like disconnected stark black/white labels.
+     */
+    fun pickNaturalHarmonicClockHex(avgSkyL: Float, avgSkyA: Float, avgSkyB: Float): String {
+        val chroma = sqrt(avgSkyA * avgSkyA + avgSkyB * avgSkyB)
+        val tintAttenuation = if (chroma > 1e-3f) minOf(1f, 22f / chroma) else 0f
+        val harmA = avgSkyA * 0.34f * tintAttenuation
+        val harmB = avgSkyB * 0.34f * tintAttenuation
+
+        val targetL = when {
+            avgSkyL >= 76f -> 18f // Bright snow/pastel sky -> deep atmospheric slate/ink tint
+            avgSkyL >= 62f -> 21f // Warm cream/daylight sky -> rich tonal charcoal tint
+            avgSkyL >= 42f -> 95f // Mid-density twilight/clouds -> crisp pearlescent highlight
+            else -> 92f           // Deep night/charcoal -> luminous atmospheric mist white
+        }
+        // Subtle ambient hue bias when sky is achromatic neutral so ink never reads flat grey
+        val finalA = if (chroma < 3f) if (targetL > 50f) 1.5f else -1.5f else harmA
+        val finalB = if (chroma < 3f) if (targetL > 50f) -3.5f else -5.0f else harmB
+
+        val argb = labToSrgbArgb(targetL, finalA, finalB)
+        return String.format("#%06X", argb and 0x00FFFFFF)
+    }
+
+    /**
+     * Backward-compatible entry point delegating to [pickNaturalHarmonicClockHex].
+     */
+    fun pickHighContrastClockHex(avgSkyL: Float, avgSkyA: Float, avgSkyB: Float): String =
+        pickNaturalHarmonicClockHex(avgSkyL, avgSkyA, avgSkyB)
+
+    /**
+     * Refines a wallpaper swatch into a secondary clock gradient/accent tint paired naturally
+     * against [primaryArgb] without muddy low-contrast clipping.
+     */
+    fun harmonizeWallpaperAccent(swatchArgb: Int, primaryArgb: Int): Int {
+        val swatchLab = FloatArray(3)
+        val primaryLab = FloatArray(3)
+        argbToLab(swatchArgb, swatchLab)
+        argbToLab(primaryArgb, primaryLab)
+
+        val primaryBright = primaryLab[0] >= 55f
+        val targetL = if (primaryBright) {
+            swatchLab[0].coerceIn(68f, 86f)
+        } else {
+            swatchLab[0].coerceIn(26f, 44f)
+        }
+        val chroma = sqrt(swatchLab[1] * swatchLab[1] + swatchLab[2] * swatchLab[2])
+        val maxChroma = if (primaryBright) 36f else 32f
+        val chromaGain = when {
+            chroma < 1f -> 1f
+            chroma < 14f -> 1.45f
+            chroma > maxChroma -> maxChroma / chroma
+            else -> 1f
+        }
+        val a = swatchLab[1] * chromaGain
+        val b = swatchLab[2] * chromaGain
+        return labToSrgbArgb(targetL, a, b)
     }
 }

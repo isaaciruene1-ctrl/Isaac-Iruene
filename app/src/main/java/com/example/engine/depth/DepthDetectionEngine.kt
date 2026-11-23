@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Deterministic, pixel-accurate on-device Depth Detection Engine for BACKDROP.
+ * Deterministic, pixel-accurate on-device Depth Detection Engine for Backdrops.
  *
  * Pipeline:
  * 1. Safe software ARGB_8888 normalization + aspect-preserving analysis grid (<= 360px wide).
@@ -156,7 +156,7 @@ class DepthDetectionEngine {
                 cutoutBitmap = null,
                 recommendedClockTopFraction = 0.14f,
                 recommendedAlign = ClockHorizontalAlign.CENTER,
-                recommendedClockColorHex = LabColorSpace.pickHighContrastClockHex(
+                recommendedClockColorHex = LabColorSpace.pickNaturalHarmonicClockHex(
                     topBorderStats.meanL,
                     topBorderStats.meanA,
                     topBorderStats.meanB
@@ -206,7 +206,11 @@ class DepthDetectionEngine {
             subjectPeakXFraction = geometry.peakXFraction,
             foregroundCoverageFraction = geometry.coverageFraction,
             processingTimeMs = SystemClock.elapsedRealtime() - startMs,
-            recommendedClockOverlapFraction = geometry.clockOcclusionFraction
+            recommendedClockOverlapFraction = geometry.clockOcclusionFraction,
+            recommendedWallpaperZoom = geometry.recommendedWallpaperZoom,
+            recommendedWallpaperPanXFraction = geometry.recommendedWallpaperPanXFraction,
+            recommendedWallpaperPanYFraction = geometry.recommendedWallpaperPanYFraction,
+            recommendedClockScale = geometry.recommendedClockScale
         )
     }
 
@@ -776,7 +780,11 @@ class DepthDetectionEngine {
         val coverageFraction: Float,
         val recommendedClockTopFraction: Float,
         val recommendedAlign: ClockHorizontalAlign,
-        val clockOcclusionFraction: Float
+        val clockOcclusionFraction: Float,
+        val recommendedWallpaperZoom: Float = 1.0f,
+        val recommendedWallpaperPanXFraction: Float = 0f,
+        val recommendedWallpaperPanYFraction: Float = 0f,
+        val recommendedClockScale: Float = 1.0f
     )
 
     private fun evaluateDepthSubjectGeometry(
@@ -970,6 +978,48 @@ class DepthDetectionEngine {
         val headroomBonus = (1f - topClearOcclusion).coerceIn(0f, 1f) * 20f
         val quality = ((separationGap * 82f) + headroomBonus).roundToInt().coerceIn(20, 99)
 
+        // Joint Wallpaper + Clock Framing Recommendation for Auto Snap:
+        // Ensures ideal upper sky headroom + lower-numeral foreground overlap (~22%-34%).
+        var recZoom = 1.0f
+        var recPanYFrac = 0f
+        var recPanXFrac = 0f
+        var recClockScale = 1.0f
+
+        when {
+            peakYFrac > 0.34f -> {
+                // Subject peak sits fairly low: zoom gently and pan image upward so silhouette rises into clock base
+                val liftNeed = ((peakYFrac - 0.25f) / 0.25f).coerceIn(0f, 1f)
+                recZoom = (1.10f + liftNeed * 0.18f).coerceIn(1.0f, 1.32f)
+                recPanYFrac = (-0.08f - liftNeed * 0.14f).coerceIn(-0.24f, 0f)
+                recClockScale = 1.04f
+            }
+            peakYFrac < 0.14f -> {
+                // Tall subject crowds top sky: zoom slightly and push wallpaper down to carve crisp clock headroom
+                val headroomNeed = ((0.16f - peakYFrac) / 0.14f).coerceIn(0f, 1f)
+                recZoom = (1.10f + headroomNeed * 0.14f).coerceIn(1.0f, 1.28f)
+                recPanYFrac = (0.09f + headroomNeed * 0.12f).coerceIn(0f, 0.22f)
+                recClockScale = 0.96f
+            }
+            else -> {
+                // Sweet-spot headroom: crisp slight framing zoom if subject crown sits off-center horizontally
+                if (abs(peakXFrac - 0.5f) > 0.12f && widthFrac < 0.65f) {
+                    recZoom = 1.08f
+                    recPanXFrac = ((0.5f - peakXFrac) * 0.22f).coerceIn(-0.12f, 0.12f)
+                }
+            }
+        }
+
+        // Re-evaluate effective clock top fraction in the framed viewport so Auto Snap lands cleanly
+        val effectivePeakY = (peakYFrac - (recPanYFrac * 0.35f)).coerceIn(0.10f, 0.45f)
+        val framedTopFrac = if (recZoom > 1.02f) {
+            when (category) {
+                DepthSubjectCategory.CELESTIAL_ORB -> (effectivePeakY - 0.06f).coerceIn(0.08f, 0.25f)
+                else -> (effectivePeakY - 0.13f).coerceIn(0.08f, 0.26f)
+            }
+        } else {
+            bestTopFrac
+        }
+
         return DepthGeometryEval(
             isEligible = isWellSeparated && quality >= 42,
             category = category,
@@ -977,9 +1027,13 @@ class DepthDetectionEngine {
             peakYFraction = peakYFrac,
             peakXFraction = peakXFrac,
             coverageFraction = coverage,
-            recommendedClockTopFraction = bestTopFrac,
+            recommendedClockTopFraction = framedTopFrac,
             recommendedAlign = recommendedAlign,
-            clockOcclusionFraction = bestLowerOcc.coerceIn(0f, 1f)
+            clockOcclusionFraction = bestLowerOcc.coerceIn(0f, 1f),
+            recommendedWallpaperZoom = recZoom,
+            recommendedWallpaperPanXFraction = recPanXFrac,
+            recommendedWallpaperPanYFraction = recPanYFrac,
+            recommendedClockScale = recClockScale
         )
     }
 
@@ -1170,17 +1224,13 @@ class DepthDetectionEngine {
             }
         }
         return if (cnt > 0) {
-            LabColorSpace.pickHighContrastClockHex(sL / cnt, sA / cnt, sB / cnt)
+            LabColorSpace.pickNaturalHarmonicClockHex(sL / cnt, sA / cnt, sB / cnt)
         } else {
-            LabColorSpace.pickHighContrastClockHex(fallbackStats.meanL, fallbackStats.meanA, fallbackStats.meanB)
+            LabColorSpace.pickNaturalHarmonicClockHex(fallbackStats.meanL, fallbackStats.meanA, fallbackStats.meanB)
         }
     }
 
-    private fun inferSubjectLabel(category: DepthSubjectCategory, titleHint: String): String {
-        val cleanHint = titleHint.trim()
-        if (cleanHint.isNotBlank() && cleanHint != "Wallpaper" && cleanHint != "Custom Photo") {
-            return cleanHint
-        }
+    private fun inferSubjectLabel(category: DepthSubjectCategory, @Suppress("UNUSED_PARAMETER") titleHint: String): String {
         return category.displayName
     }
 
@@ -1198,7 +1248,7 @@ class DepthDetectionEngine {
         cutoutBitmap = null,
         recommendedClockTopFraction = 0.14f,
         recommendedAlign = ClockHorizontalAlign.CENTER,
-        recommendedClockColorHex = LabColorSpace.pickHighContrastClockHex(skyL, skyA, skyB),
+        recommendedClockColorHex = LabColorSpace.pickNaturalHarmonicClockHex(skyL, skyA, skyB),
         subjectTopFraction = 0.5f,
         subjectPeakXFraction = 0.5f,
         foregroundCoverageFraction = 0f,

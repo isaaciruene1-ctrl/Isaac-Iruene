@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,12 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,12 +83,20 @@ fun ExploreSearchScreen(
     onResetFilters: () -> Unit,
     onOpenWallpaper: (Wallpaper) -> Unit,
     onToggleFavorite: (String) -> Unit,
-    onOpenAiStudioWithPrompt: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
     val hasActiveFilter = filters != SearchFilters()
     val isGlass = LocalUiStyleMode.current == UiStyleMode.FROSTED_GLASS_OS
+    val chipColors = FilterChipDefaults.filterChipColors(
+        containerColor = if (isGlass) MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        labelColor = MaterialTheme.colorScheme.onSurface,
+        iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer
+    )
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -112,41 +120,58 @@ fun ExploreSearchScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedTextField(
-                    value = filters.query,
-                    onValueChange = onQueryChange,
-                    placeholder = { Text("Search titles, tags, colors, 4K, Kyoto...") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Rounded.Search, contentDescription = null)
-                    },
-                    trailingIcon = {
-                        if (filters.query.isNotEmpty()) {
-                            IconButton(onClick = { onQueryChange("") }) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Clear search query"
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(
-                        onSearch = {
-                            onCommitSearch(filters.query)
-                            focusManager.clearFocus()
-                        }
-                    ),
+                TactileSurface(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        unfocusedBorderColor = Color.Transparent
-                    ),
                     modifier = Modifier
+                        .widthIn(max = 720.dp)
                         .fillMaxWidth()
-                        .testTag("explore_search_input")
-                )
+                ) {
+                    OutlinedTextField(
+                        value = filters.query,
+                        onValueChange = onQueryChange,
+                        placeholder = { Text("Search titles, tags, colors, 4K, Kyoto...") },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Rounded.Search, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            if (filters.query.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChange("") }) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Clear search query"
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                onCommitSearch(filters.query)
+                                focusManager.clearFocus()
+                            }
+                        ),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("explore_search_input")
+                    )
+                }
             }
         }
 
@@ -189,6 +214,7 @@ fun ExploreSearchScreen(
                                     )
                                 },
                                 label = { Text(item) },
+                                colors = chipColors,
                                 shape = RoundedCornerShape(50)
                             )
                         }
@@ -207,6 +233,7 @@ fun ExploreSearchScreen(
                                 onCommitSearch(suggestion)
                             },
                             label = { Text(suggestion) },
+                            colors = chipColors,
                             shape = RoundedCornerShape(50)
                         )
                     }
@@ -214,7 +241,7 @@ fun ExploreSearchScreen(
             }
         }
 
-        // Resolution & Mode Filter Chips (4K, QHD, Full HD, AMOLED, Portrait, Depth Studio, Recently Added, Most Popular)
+        // Resolution & Mode Filter Chips
         item {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
@@ -229,6 +256,7 @@ fun ExploreSearchScreen(
                             )
                         },
                         label = { Text("4K") },
+                        colors = chipColors,
                         modifier = Modifier.testTag("filter_4k")
                     )
                 }
@@ -241,6 +269,7 @@ fun ExploreSearchScreen(
                             )
                         },
                         label = { Text("2K QHD") },
+                        colors = chipColors,
                         modifier = Modifier.testTag("filter_qhd")
                     )
                 }
@@ -252,7 +281,8 @@ fun ExploreSearchScreen(
                                 if (filters.resolutionTier == ResolutionTier.FHD_1080) null else ResolutionTier.FHD_1080
                             )
                         },
-                        label = { Text("Full HD") }
+                        label = { Text("Full HD") },
+                        colors = chipColors
                     )
                 }
                 item {
@@ -260,6 +290,7 @@ fun ExploreSearchScreen(
                         selected = filters.amoledOnly,
                         onClick = onToggleAmoled,
                         label = { Text("AMOLED") },
+                        colors = chipColors,
                         modifier = Modifier.testTag("filter_amoled")
                     )
                 }
@@ -267,7 +298,8 @@ fun ExploreSearchScreen(
                     FilterChip(
                         selected = filters.portraitOnly,
                         onClick = onTogglePortrait,
-                        label = { Text("Portrait") }
+                        label = { Text("Portrait") },
+                        colors = chipColors
                     )
                 }
                 item {
@@ -275,6 +307,7 @@ fun ExploreSearchScreen(
                         selected = filters.depthStudioOnly,
                         onClick = onToggleDepthStudio,
                         label = { Text("Depth Studio") },
+                        colors = chipColors,
                         modifier = Modifier.testTag("filter_depth")
                     )
                 }
@@ -287,7 +320,8 @@ fun ExploreSearchScreen(
                                 else SearchSort.RECENTLY_ADDED
                             )
                         },
-                        label = { Text("Recently Added") }
+                        label = { Text("Recently Added") },
+                        colors = chipColors
                     )
                 }
                 item {
@@ -299,7 +333,8 @@ fun ExploreSearchScreen(
                                 else SearchSort.MOST_POPULAR
                             )
                         },
-                        label = { Text("Most Popular") }
+                        label = { Text("Most Popular") },
+                        colors = chipColors
                     )
                 }
             }
@@ -311,6 +346,7 @@ fun ExploreSearchScreen(
                 Text(
                     text = "Colour Discovery",
                     style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
                 LazyRow(
@@ -319,9 +355,11 @@ fun ExploreSearchScreen(
                 ) {
                     items(ColorFamily.entries) { colorFamily ->
                         val selected = filters.colorFamily == colorFamily
+                        val swatchText = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                         Surface(
                             color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = if (isGlass) 0.72f else 1f),
+                            else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.86f else 1f),
+                            contentColor = swatchText,
                             shape = RoundedCornerShape(20.dp),
                             border = glassSpecularBorder(),
                             tonalElevation = if (isGlass) 0.dp else if (selected) 3.dp else 1.dp,
@@ -346,7 +384,8 @@ fun ExploreSearchScreen(
                                 )
                                 Text(
                                     text = colorFamily.label,
-                                    style = MaterialTheme.typography.labelLarge
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = swatchText
                                 )
                             }
                         }
@@ -361,6 +400,7 @@ fun ExploreSearchScreen(
                 Text(
                     text = "Browse Categories",
                     style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
                 LazyRow(
@@ -369,13 +409,16 @@ fun ExploreSearchScreen(
                 ) {
                     items(WallpaperCategory.entries) { cat ->
                         val selected = filters.category == cat
+                        val catTitleColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                        val catSubColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
                         Surface(
                             color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (isGlass) 0.72f else 1f),
+                            else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (isGlass) 0.86f else 1f),
+                            contentColor = catTitleColor,
                             shape = RoundedCornerShape(22.dp),
                             border = glassSpecularBorder(),
                             modifier = Modifier
-                                .width(152.dp)
+                                .width(156.dp)
                                 .clip(RoundedCornerShape(22.dp))
                                 .clickable { onSelectCategory(if (selected) null else cat) }
                                 .testTag("category_card_${cat.name}")
@@ -385,6 +428,7 @@ fun ExploreSearchScreen(
                                     text = cat.displayName,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
+                                    color = catTitleColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -392,78 +436,13 @@ fun ExploreSearchScreen(
                                 Text(
                                     text = cat.tagline,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = catSubColor,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
-                }
-            }
-        }
-
-        // Gemini AI Studio Prompt Integration Banner
-        item {
-            TactileSurface(
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.68f),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .clickable {
-                        focusManager.clearFocus()
-                        onOpenAiStudioWithPrompt(filters.query)
-                    }
-                    .testTag("explore_ai_studio_banner")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiary,
-                        shape = CircleShape,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onTertiary
-                            )
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (filters.query.isNotBlank()) {
-                                "Create \"${filters.query.trim()}\" in AI Studio"
-                            } else {
-                                "Create Custom Artwork with Gemini AI"
-                            },
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "Generate 4K wallpapers, remix styles, or ask the Curator",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                        contentDescription = "Launch AI Studio",
-                        tint = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
                 }
             }
         }
@@ -502,19 +481,15 @@ fun ExploreSearchScreen(
         if (results.isEmpty()) {
             item {
                 Box(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    val hasQuery = filters.query.isNotBlank()
                     EmptyStatePanel(
                         title = "No matching canvases",
-                        subtitle = if (hasQuery) {
-                            "No preset matched \"${filters.query.trim()}\". Generate it in Gemini AI Studio or reset filters."
+                        subtitle = if (filters.query.isNotBlank()) {
+                            "No artwork matched \"${filters.query.trim()}\". Clear the query or reset filters to browse all ${WallpaperCatalog.allWallpapers.size} canvases."
                         } else {
                             "Try clearing a resolution or color filter to explore all ${WallpaperCatalog.allWallpapers.size} wallpapers."
                         },
-                        actionLabel = if (hasQuery) "Create in AI Studio" else "Reset all filters",
-                        onAction = {
-                            if (hasQuery) onOpenAiStudioWithPrompt(filters.query)
-                            else onResetFilters()
-                        }
+                        actionLabel = "Reset all filters",
+                        onAction = onResetFilters
                     )
                 }
             }

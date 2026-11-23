@@ -6,38 +6,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.CleaningServices
-import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.HighQuality
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,8 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.data.model.ImageQualityPref
-import com.example.data.model.ThemeMode
+import com.example.data.catalog.WallpaperCatalog
 import com.example.data.model.UserPreferencesDoc
 import com.example.ui.components.BackdropLogoMark
 import com.example.ui.components.BackdropWordmark
@@ -63,25 +50,13 @@ import java.util.Locale
 
 @Composable
 fun ProfileSettingsScreen(
-    displayName: String?,
-    email: String?,
     favoriteCount: Int,
     collectionCount: Int,
     preferences: UserPreferencesDoc,
     cacheBytes: Long,
     onRefreshCacheSize: () -> Unit,
     onClearCache: () -> Unit,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    onAmoledDarkChange: (Boolean) -> Unit,
-    onHomeCategoryChipsChange: (Boolean) -> Unit,
-    onImageQualityChange: (ImageQualityPref) -> Unit,
-    onWifiOnlyChange: (Boolean) -> Unit,
     onOpenSettingsPanel: () -> Unit,
-    onSignOut: () -> Unit,
-    isGuest: Boolean = false,
-    isSigningIn: Boolean = false,
-    onSignInWithGoogle: (() -> Unit)? = null,
-    onExitGuestMode: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showPrivacyDialog by remember { mutableStateOf(false) }
@@ -98,400 +73,285 @@ fun ProfileSettingsScreen(
             else -> String.format(Locale.US, "%.1f MB", cacheBytes / (1024f * 1024f))
         }
     }
+    val totalCount = remember { WallpaperCatalog.allWallpapers.size }
 
-    LazyColumn(
+    Box(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        contentAlignment = Alignment.TopCenter
     ) {
-        item {
-            Text(
-                text = "Profile & Studio Settings",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+        LazyColumn(
+            modifier = Modifier
+                .widthIn(max = 860.dp)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 112.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            item {
+                Text(
+                    text = "Profile",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
 
-        // User Account Card
-        item {
-            TactileSurface(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f),
-                shape = RoundedCornerShape(28.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+            // 1. Personal Studio Overview Hero
+            item {
+                TactileSurface(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape,
+                                modifier = Modifier.size(54.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    BackdropLogoMark(size = 30.dp)
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Backdrops Studio",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "On-device library • $totalCount+ 4K curated canvases",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.86f)
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatBadge(
+                                label = "Favorites",
+                                value = favoriteCount.toString(),
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatBadge(
+                                label = "Collections",
+                                value = collectionCount.toString(),
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatBadge(
+                                label = "Catalog",
+                                value = totalCount.toString(),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. Direct Studio Settings & UI Style Link
+            item {
+                TactileSurface(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.76f),
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = RoundedCornerShape(26.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(26.dp))
+                        .clickable(onClick = onOpenSettingsPanel)
+                        .testTag("profile_open_settings_button")
                 ) {
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
                             color = MaterialTheme.colorScheme.primary,
                             shape = CircleShape,
-                            modifier = Modifier.size(54.dp)
+                            modifier = Modifier.size(44.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                val initials = (displayName?.trim()?.takeIf { it.isNotEmpty() } ?: "B")
-                                    .take(1)
-                                    .uppercase()
-                                Text(
-                                    text = initials,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    fontWeight = FontWeight.Bold
+                                Icon(
+                                    imageVector = Icons.Rounded.Tune,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary
                                 )
                             }
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isGuest) "Guest Session"
-                                else displayName?.takeIf { it.isNotBlank() } ?: "BACKDROP Creator",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                text = "Studio Settings & UI Style",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Text(
-                                text = if (isGuest) "Local device storage only • Sign in to sync"
-                                else email?.takeIf { it.isNotBlank() } ?: "Google Synced Studio",
+                                text = "${preferences.parsedUiStyle.label} • ${preferences.parsedThemeMode.name.lowercase().replaceFirstChar { it.uppercase() }} Theme • ${preferences.parsedImageQuality.label}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.88f)
                             )
                         }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = "Open Studio Settings",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
                     }
+                }
+            }
 
+            // 3. Storage & Privacy / About
+            item {
+                ProfileSectionCard(title = "Cache, Privacy & About") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatBadge(
-                            label = "Favorites",
-                            value = favoriteCount.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatBadge(
-                            label = "Collections",
-                            value = collectionCount.toString(),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Dedicated Studio Settings Entry Card (UI Style Switcher + AI Diagnostics)
-        item {
-            TactileSurface(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.64f),
-                shape = RoundedCornerShape(26.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
-                    .clickable(onClick = onOpenSettingsPanel)
-                    .testTag("profile_open_settings_button")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = CircleShape,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Tune,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Studio Settings & UI Style",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            text = "Active: ${preferences.parsedUiStyle.label} • Switch to Frosted Glass OS & test Gemini",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        contentDescription = "Open Studio Settings",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-        }
-
-        // Appearance & AMOLED Dark
-        item {
-            SettingsCard(title = "Appearance & Theme") {
-                Text(
-                    text = "Color Theme",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    val modes = listOf(
-                        ThemeMode.SYSTEM to "System",
-                        ThemeMode.LIGHT to "Light",
-                        ThemeMode.DARK to "Dark"
-                    )
-                    modes.forEachIndexed { idx, (mode, label) ->
-                        SegmentedButton(
-                            selected = preferences.parsedThemeMode == mode,
-                            onClick = { onThemeModeChange(mode) },
-                            shape = SegmentedButtonDefaults.itemShape(index = idx, count = modes.size),
-                            modifier = Modifier.testTag("theme_mode_${mode.name}")
-                        ) {
-                            Text(label)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Rounded.DarkMode, contentDescription = null)
-                        Column {
-                            Text("AMOLED Pitch Black", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "True #000000 background when dark mode is active",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = preferences.amoledDark,
-                        onCheckedChange = onAmoledDarkChange,
-                        modifier = Modifier.testTag("amoled_dark_switch")
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Rounded.FilterList, contentDescription = null)
-                        Column {
-                            Text("Home Category Chips", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "Show Abstract, Nature, Architecture & Minimal filter chips on Home",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = preferences.homeCategoryChipsEnabled,
-                        onCheckedChange = onHomeCategoryChipsChange,
-                        modifier = Modifier.testTag("home_category_chips_switch")
-                    )
-                }
-            }
-        }
-
-        // Downloads & Quality
-        item {
-            SettingsCard(title = "Image Quality & Downloads") {
-                ImageQualityPref.entries.forEach { pref ->
-                    val selected = preferences.parsedImageQuality == pref
-                    Surface(
-                        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainer,
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable { onImageQualityChange(pref) }
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(
-                            modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Rounded.HighQuality, contentDescription = null)
+                            Icon(
+                                imageVector = Icons.Rounded.CleaningServices,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                             Column {
-                                Text(pref.label, style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    pref.description,
+                                    "Artwork Preview Cache",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Currently using $cacheLabel on device",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Rounded.Wifi, contentDescription = null)
-                        Column {
-                            Text("Wi-Fi Only Downloads", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "Save cellular data for full-resolution 4K exports",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = preferences.wifiOnlyDownloads,
-                        onCheckedChange = onWifiOnlyChange
-                    )
-                }
-            }
-        }
-
-        // Storage & Cache Management
-        item {
-            SettingsCard(title = "Storage & Cache") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Rounded.CleaningServices, contentDescription = null)
-                        Column {
-                            Text("Cached Artwork Previews", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "Currently using $cacheLabel on disk",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = onClearCache,
-                        modifier = Modifier.testTag("clear_cache_button")
-                    ) {
-                        Text("Clear")
-                    }
-                }
-            }
-        }
-
-        // Legal & About + Sign Out
-        item {
-            SettingsCard(title = "About & Account") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { showPrivacyDialog = true }
-                        .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(Icons.Rounded.Policy, contentDescription = null)
-                    Column {
-                        Text("Privacy Policy", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Cloud sync & scoped media handling",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { showAboutDialog = true }
-                        .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(Icons.Rounded.Info, contentDescription = null)
-                    Column {
-                        Text("About BACKDROP", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Version 1.0 • YOUR SCREEN. YOUR CANVAS.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (isGuest) {
-                    if (onSignInWithGoogle != null) {
-                        Button(
-                            onClick = onSignInWithGoogle,
-                            enabled = !isSigningIn,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("guest_upgrade_google_button")
-                        ) {
-                            Text(if (isSigningIn) "Signing in..." else "Sign in with Google to Sync")
-                        }
-                    }
-                    if (onExitGuestMode != null) {
                         OutlinedButton(
-                            onClick = onExitGuestMode,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .testTag("exit_guest_mode_button")
+                            onClick = onClearCache,
+                            modifier = Modifier.testTag("clear_cache_button")
                         ) {
-                            Text("Return to Sign-In Screen")
+                            Text("Clear")
                         }
                     }
-                } else {
-                    Button(
-                        onClick = onSignOut,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        ),
-                        shape = RoundedCornerShape(50),
+
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("sign_out_button")
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showPrivacyDialog = true }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sign Out")
+                        Icon(
+                            imageVector = Icons.Rounded.Policy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                "Privacy Policy",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "On-device storage & zero-permission photo picker",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showAboutDialog = true }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                "About Backdrops",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Version 1.0 • YOUR SCREEN. YOUR CANVAS.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. Developer Credit
+            item {
+                TactileSurface(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("developer_credit_card")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = CircleShape,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Code,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Developed by Isaac Iruene",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Backdrops Spatial Depth & Optical Liquid Glass Engine",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -504,9 +364,9 @@ fun ProfileSettingsScreen(
             title = { Text("Privacy Policy") },
             text = {
                 Text(
-                    "BACKDROP signs you in with Google to sync your favorites, personal collections, " +
-                        "recent search history, and theme preferences securely in your private Cloud Firestore workspace. " +
-                        "Downloaded wallpapers are saved via Android Scoped Storage without requesting broad media library access."
+                    "Backdrops stores your favorites, collections, search history, and studio settings " +
+                        "strictly on your device with no account required. All Depth Studio subject extraction runs " +
+                        "100% locally on-device, and custom photos are selected through the zero-permission Android Photo Picker."
                 )
             },
             confirmButton = {
@@ -529,9 +389,15 @@ fun ProfileSettingsScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "BACKDROP pairs a curated 220+ 4K photography & digital art library with " +
-                            "interactive Preview Studio, Depth Studio, and Gemini AI Wallpaper creation.",
+                        "Backdrops pairs a curated $totalCount+ 4K photography & digital art library with " +
+                            "interactive Preview Studio, pixel-level Depth Studio optical glass lock clocks, and live UI Style switching.",
                         style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Developed by Isaac Iruene",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -558,7 +424,8 @@ private fun StatBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(18.dp),
         border = glassSpecularBorder(),
         modifier = modifier
@@ -567,7 +434,8 @@ private fun StatBadge(
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = label,
@@ -579,7 +447,7 @@ private fun StatBadge(
 }
 
 @Composable
-private fun SettingsCard(
+private fun ProfileSectionCard(
     title: String,
     content: @Composable () -> Unit
 ) {
@@ -595,7 +463,8 @@ private fun SettingsCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             content()
         }

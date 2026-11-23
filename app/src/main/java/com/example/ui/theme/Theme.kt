@@ -3,6 +3,7 @@ package com.example.ui.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -13,14 +14,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.model.ThemeMode
 import com.example.data.model.UiStyleMode
+import kotlin.math.abs
 
 val LocalUiStyleMode = staticCompositionLocalOf { UiStyleMode.MATERIAL_3 }
 val LocalDarkThemeFlag = staticCompositionLocalOf { false }
 val LocalAmoledDarkFlag = staticCompositionLocalOf { false }
+val LocalHapticsEnabled = staticCompositionLocalOf { true }
+val LocalReducedMotionFlag = staticCompositionLocalOf { false }
+val LocalGlassDepthIntensity = staticCompositionLocalOf { 1.0f }
 
 private val PastelLightColorScheme = lightColorScheme(
     primary = PastelPeriwinkle,
@@ -88,12 +94,90 @@ val BackdropShapes = Shapes(
     extraLarge = RoundedCornerShape(34.dp)
 )
 
+/**
+ * Guarantees WCAG-grade foreground/background separation across dynamic Material You dark palettes
+ * when layered on translucent Frosted Glass OS panels and AMOLED pitch-black backdrops.
+ */
+internal fun ensureDarkGlassContrastScheme(
+    scheme: ColorScheme,
+    amoledDark: Boolean,
+    isGlass: Boolean
+): ColorScheme {
+    fun needsLightContentFix(container: Color, content: Color): Boolean {
+        return abs(container.luminance() - content.luminance()) < 0.34f
+    }
+
+    val safePrimary = if (scheme.primary.luminance() < 0.36f) DarkPastelLilac else scheme.primary
+    val safeOnPrimary = if (needsLightContentFix(safePrimary, scheme.onPrimary)) Color(0xFF1F1246) else scheme.onPrimary
+    val safePrimaryContainer = if (scheme.primaryContainer.luminance() > 0.42f || scheme.primaryContainer.luminance() < 0.04f) {
+        DarkPastelLilacContainer
+    } else {
+        scheme.primaryContainer
+    }
+    val safeOnPrimaryContainer = if (needsLightContentFix(safePrimaryContainer, scheme.onPrimaryContainer) || scheme.onPrimaryContainer.luminance() < 0.65f) {
+        OnDarkPastelLilacContainer
+    } else {
+        scheme.onPrimaryContainer
+    }
+
+    val safeSecondary = if (scheme.secondary.luminance() < 0.36f) DarkPastelMint else scheme.secondary
+    val safeSecondaryContainer = if (scheme.secondaryContainer.luminance() > 0.42f || scheme.secondaryContainer.luminance() < 0.04f) {
+        DarkPastelMintContainer
+    } else {
+        scheme.secondaryContainer
+    }
+    val safeOnSecondaryContainer = if (needsLightContentFix(safeSecondaryContainer, scheme.onSecondaryContainer) || scheme.onSecondaryContainer.luminance() < 0.65f) {
+        OnDarkPastelMintContainer
+    } else {
+        scheme.onSecondaryContainer
+    }
+
+    val baseDark = scheme.copy(
+        primary = safePrimary,
+        onPrimary = safeOnPrimary,
+        primaryContainer = safePrimaryContainer,
+        onPrimaryContainer = safeOnPrimaryContainer,
+        secondary = safeSecondary,
+        secondaryContainer = safeSecondaryContainer,
+        onSecondaryContainer = safeOnSecondaryContainer,
+        onBackground = DarkInk,
+        onSurface = DarkInk,
+        onSurfaceVariant = DarkMutedInk,
+        outline = DarkOutline,
+        outlineVariant = if (isGlass) Color(0xFF6C6485) else DarkOutlineVariant
+    )
+
+    return if (amoledDark) {
+        baseDark.copy(
+            background = AmoledPitchBlack,
+            surface = AmoledPitchBlack,
+            surfaceContainerLowest = AmoledPitchBlack,
+            surfaceContainerLow = Color(0xFF100F18),
+            surfaceContainer = Color(0xFF181724),
+            surfaceContainerHigh = Color(0xFF232132),
+            surfaceContainerHighest = Color(0xFF302E42)
+        )
+    } else if (isGlass) {
+        baseDark.copy(
+            surfaceContainerLow = Color(0xFF191724),
+            surfaceContainer = Color(0xFF211E30),
+            surfaceContainerHigh = Color(0xFF2B283D),
+            surfaceContainerHighest = Color(0xFF37334C)
+        )
+    } else {
+        baseDark
+    }
+}
+
 @Composable
 fun BackdropTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     amoledDark: Boolean = false,
     uiStyle: UiStyleMode = UiStyleMode.MATERIAL_3,
     useDynamicColor: Boolean = true,
+    hapticFeedbackEnabled: Boolean = true,
+    reducedMotionEnabled: Boolean = false,
+    glassDepthIntensity: Float = 1.0f,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -102,9 +186,10 @@ fun BackdropTheme(
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
+    val isGlass = uiStyle == UiStyleMode.FROSTED_GLASS_OS
 
     val context = LocalContext.current
-    val baseScheme = when {
+    val rawScheme = when {
         useDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
@@ -112,22 +197,23 @@ fun BackdropTheme(
         else -> PastelLightColorScheme
     }
 
-    val colorScheme = if (isDark && amoledDark) {
-        baseScheme.copy(
-            background = AmoledPitchBlack,
-            surface = AmoledPitchBlack,
-            surfaceContainerLowest = AmoledPitchBlack,
-            surfaceContainerLow = Color(0xFF0A0A0E),
-            surfaceContainer = Color(0xFF121118)
+    val colorScheme = if (isDark) {
+        ensureDarkGlassContrastScheme(
+            scheme = rawScheme,
+            amoledDark = amoledDark,
+            isGlass = isGlass
         )
     } else {
-        baseScheme
+        rawScheme
     }
 
     CompositionLocalProvider(
         LocalUiStyleMode provides uiStyle,
         LocalDarkThemeFlag provides isDark,
-        LocalAmoledDarkFlag provides (isDark && amoledDark)
+        LocalAmoledDarkFlag provides (isDark && amoledDark),
+        LocalHapticsEnabled provides hapticFeedbackEnabled,
+        LocalReducedMotionFlag provides reducedMotionEnabled,
+        LocalGlassDepthIntensity provides glassDepthIntensity.coerceIn(0.55f, 1.45f)
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

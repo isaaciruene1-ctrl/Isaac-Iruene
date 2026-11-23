@@ -8,9 +8,20 @@ import com.example.data.model.WallpaperCategory
 
 object WallpaperCatalog {
 
-    // Ensure every wallpaper has a strictly unique Unsplash photo slug so zero duplicates appear
+    // Ensure every wallpaper has a strictly unique photo slug / seed URL so zero duplicates appear
     val allWallpapers: List<Wallpaper> by lazy {
-        val raw = buildCatalogPartOne() + buildCatalogPartTwo() + buildCatalogPartThree() + buildCatalogPartFour()
+        val raw = buildCatalogPartOne() +
+            buildCatalogPartTwo() +
+            buildCatalogPartThree() +
+            buildCatalogPartFour() +
+            buildCatalogPartFive() +
+            buildCatalogPartSix() +
+            buildCatalogPartSeven() +
+            buildCatalogPartEight() +
+            buildCatalogPartNine() +
+            buildCatalogPartTen() +
+            buildCatalogPartEleven() +
+            buildCatalogPartTwelve()
         val seenSlugs = mutableSetOf<String>()
         val fallbackSlugs = listOf(
             "1507525428034-b723cf961d3e",

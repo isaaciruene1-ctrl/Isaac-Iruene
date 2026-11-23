@@ -92,7 +92,7 @@ class WallpaperMediaService(private val context: Context) {
             .replace(" ", "_")
             .lowercase()
             .ifEmpty { wallpaper.id }
-        val baseName = "BACKDROP_${sanitizedTitle}_${wallpaper.id}"
+        val baseName = "Backdrops_${sanitizedTitle}_${wallpaper.id}"
 
         val bytes = if (wallpaper.isBundledAsset) {
             decodeDrawableToJpeg(wallpaper.fallbackResId)
@@ -116,7 +116,7 @@ class WallpaperMediaService(private val context: Context) {
         if (savedUri != null) {
             emit(DownloadProgress.Completed(savedUri, finalName, renamed))
         } else {
-            emit(DownloadProgress.Failed("Could not write image to Pictures/BACKDROP."))
+            emit(DownloadProgress.Failed("Could not write image to Pictures/Backdrops."))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -135,12 +135,13 @@ class WallpaperMediaService(private val context: Context) {
 
     suspend fun applyWallpaper(
         wallpaper: Wallpaper,
-        target: WallpaperTarget
+        target: WallpaperTarget,
+        allowHomeParallax: Boolean = false
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val bitmap = loadFullBitmap(wallpaper)
                 ?: return@withContext Result.failure(IllegalStateException("Unable to decode wallpaper bitmap."))
-            applyBitmapAsWallpaper(bitmap, target)
+            applyBitmapAsWallpaper(bitmap, target, allowHomeParallax)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -148,7 +149,8 @@ class WallpaperMediaService(private val context: Context) {
 
     suspend fun applyBitmapAsWallpaper(
         bitmap: Bitmap,
-        target: WallpaperTarget
+        target: WallpaperTarget,
+        allowHomeParallax: Boolean = false
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val manager = WallpaperManager.getInstance(context.applicationContext)
@@ -159,10 +161,42 @@ class WallpaperMediaService(private val context: Context) {
                 return@withContext Result.failure(IllegalStateException("Device policy restricts changing the wallpaper."))
             }
 
-            val safeBitmap = if (bitmap.config == Bitmap.Config.ARGB_8888) {
+            val screenAspect = com.example.ui.screens.resolveDevicePortraitAspect(context)
+            val parallaxEnabled = allowHomeParallax && target != WallpaperTarget.LOCK
+            val cropRect = com.example.ui.screens.computeCenteredViewportCropRect(
+                sourceWidth = bitmap.width,
+                sourceHeight = bitmap.height,
+                zoomScale = 1f,
+                panOffsetX = 0f,
+                panOffsetY = 0f,
+                viewportWidthPx = 0f,
+                viewportHeightPx = 0f,
+                targetScreenAspect = screenAspect,
+                allowParallaxWidth = parallaxEnabled
+            )
+            val alignedBitmap = if (
+                cropRect.left == 0 &&
+                cropRect.top == 0 &&
+                cropRect.width == bitmap.width &&
+                cropRect.height == bitmap.height
+            ) {
                 bitmap
             } else {
-                bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap
+                Bitmap.createBitmap(bitmap, cropRect.left, cropRect.top, cropRect.width, cropRect.height)
+            }
+
+            val safeBitmap = if (alignedBitmap.config == Bitmap.Config.ARGB_8888) {
+                alignedBitmap
+            } else {
+                alignedBitmap.copy(Bitmap.Config.ARGB_8888, false) ?: alignedBitmap
+            }
+
+            // Use an explicit centered Rect when exact 1:1 Lock/Home framing is desired so OS launchers
+            // do not top-left align or add horizontal shift.
+            val cropHint: android.graphics.Rect? = if (parallaxEnabled) {
+                null
+            } else {
+                android.graphics.Rect(0, 0, safeBitmap.width, safeBitmap.height)
             }
 
             val flags = when (target) {
@@ -175,10 +209,10 @@ class WallpaperMediaService(private val context: Context) {
                 out.toByteArray()
             }
             val streamId = ByteArrayInputStream(jpegBytes).use { input ->
-                manager.setStream(input, null, true, flags)
+                manager.setStream(input, cropHint, true, flags)
             }
             if (streamId == 0) {
-                val bmpId = manager.setBitmap(safeBitmap, null, true, flags)
+                val bmpId = manager.setBitmap(safeBitmap, cropHint, true, flags)
                 if (bmpId == 0) {
                     return@withContext Result.failure(
                         IllegalStateException("System WallpaperManager rejected the wallpaper update.")
@@ -193,7 +227,7 @@ class WallpaperMediaService(private val context: Context) {
 
     suspend fun shareWallpaper(wallpaper: Wallpaper) {
         val bitmap = withContext(Dispatchers.IO) { loadFullBitmap(wallpaper) } ?: return
-        shareBitmap(bitmap, "${wallpaper.title} — BACKDROP")
+        shareBitmap(bitmap, "${wallpaper.title} — Backdrops")
     }
 
     suspend fun shareBitmap(bitmap: Bitmap, shareTitle: String) {
@@ -296,7 +330,7 @@ class WallpaperMediaService(private val context: Context) {
             val values = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
                 put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/BACKDROP")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Backdrops")
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
             val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -307,7 +341,7 @@ class WallpaperMediaService(private val context: Context) {
             resolver.update(uri, values, null, null)
             return Triple(uri, fileName, renamed)
         } else {
-            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "BACKDROP").apply {
+            val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Backdrops").apply {
                 mkdirs()
             }
             var file = File(dir, fileName)

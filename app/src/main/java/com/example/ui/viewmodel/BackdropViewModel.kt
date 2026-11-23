@@ -1,13 +1,12 @@
 package com.example.ui.viewmodel
 
 import android.content.Context
-import android.util.Log
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.example.R
 import com.example.data.catalog.WallpaperCatalog
 import com.example.data.media.BackdropImageLoader
 import com.example.data.media.DownloadProgress
@@ -16,6 +15,7 @@ import com.example.data.media.WallpaperTarget
 import com.example.data.model.ColorFamily
 import com.example.data.model.DiscoveryCollection
 import com.example.data.model.ImageQualityPref
+import com.example.data.model.LockScreenSetDoc
 import com.example.data.model.ResolutionTier
 import com.example.data.model.SearchFilters
 import com.example.data.model.SearchSort
@@ -27,10 +27,6 @@ import com.example.data.model.Wallpaper
 import com.example.data.model.WallpaperCategory
 import com.example.data.repository.GuestLocalUserStore
 import com.example.data.repository.UserSyncDataSource
-import com.example.data.repository.UserSyncRepository
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.FirebaseFirestoreException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,7 +34,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -52,15 +47,12 @@ sealed interface SyncState<out T> {
 class BackdropViewModel(
     private val syncRepository: UserSyncDataSource,
     private val mediaService: WallpaperMediaService,
-    private val currentUserId: String
+    private val currentUserId: String = GuestLocalUserStore.GUEST_USER_ID
 ) : ViewModel() {
 
     val favoriteIds: StateFlow<Set<String>> = syncRepository.observeFavorites(currentUserId)
         .map { docs -> docs.map { it.wallpaperId }.toSet() }
-        .catch { err ->
-            logFirestoreFlowError("favorites", err)
-            emit(emptySet())
-        }
+        .catch { emit(emptySet()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptySet())
 
     val favoriteWallpapers: StateFlow<SyncState<List<Wallpaper>>> = syncRepository.observeFavorites(currentUserId)
@@ -69,32 +61,31 @@ class BackdropViewModel(
             SyncState.Ready(items)
         }
         .catch { err ->
-            val msg = unwrapFirestoreErrorMessage("favorites", err)
-            emit(SyncState.Error(msg))
+            emit(SyncState.Error(err.localizedMessage ?: "Unable to load favorites"))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), SyncState.Loading)
 
     val collectionsState: StateFlow<SyncState<List<UserCollectionDoc>>> = syncRepository.observeCollections(currentUserId)
         .map<List<UserCollectionDoc>, SyncState<List<UserCollectionDoc>>> { SyncState.Ready(it) }
         .catch { err ->
-            val msg = unwrapFirestoreErrorMessage("collections", err)
-            emit(SyncState.Error(msg))
+            emit(SyncState.Error(err.localizedMessage ?: "Unable to load collections"))
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), SyncState.Loading)
+
+    val lockScreenSetsState: StateFlow<SyncState<List<LockScreenSetDoc>>> = syncRepository.observeLockScreenSets(currentUserId)
+        .map<List<LockScreenSetDoc>, SyncState<List<LockScreenSetDoc>>> { SyncState.Ready(it) }
+        .catch { err ->
+            emit(SyncState.Error(err.localizedMessage ?: "Unable to load lock-screen sets"))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), SyncState.Loading)
 
     val recentlyViewedWallpapers: StateFlow<List<Wallpaper>> = syncRepository.observeRecentlyViewed(currentUserId)
         .map { docs -> docs.mapNotNull { WallpaperCatalog.getById(it.wallpaperId) } }
-        .catch { err ->
-            logFirestoreFlowError("recentlyViewed", err)
-            emit(emptyList())
-        }
+        .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     val preferences: StateFlow<UserPreferencesDoc> = syncRepository.observePreferences(currentUserId)
-        .catch { err ->
-            logFirestoreFlowError("preferences", err)
-            emit(UserPreferencesDoc(userId = currentUserId))
-        }
+        .catch { emit(UserPreferencesDoc(userId = currentUserId)) }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000L),
@@ -119,6 +110,9 @@ class BackdropViewModel(
 
     private val _cacheBytes = MutableStateFlow(0L)
     val cacheBytes: StateFlow<Long> = _cacheBytes.asStateFlow()
+
+    private val _discoverySeed = MutableStateFlow(System.currentTimeMillis())
+    val discoverySeed: StateFlow<Long> = _discoverySeed.asStateFlow()
 
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val events = _events.asSharedFlow()
@@ -209,6 +203,36 @@ class BackdropViewModel(
         }
     }
 
+    fun saveLockScreenSet(set: LockScreenSetDoc) {
+        viewModelScope.launch {
+            val res = syncRepository.saveLockScreenSet(currentUserId, set)
+            if (res.isSuccess) {
+                val saved = res.getOrThrow()
+                _events.tryEmit("Saved set \"${saved.name}\"")
+            } else {
+                _events.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Failed to save set")
+            }
+        }
+    }
+
+    fun toggleLockScreenSetFavorite(setId: String) {
+        viewModelScope.launch {
+            val res = syncRepository.toggleLockScreenSetFavorite(currentUserId, setId)
+            if (res.isFailure) {
+                _events.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Could not bookmark set")
+            }
+        }
+    }
+
+    fun deleteLockScreenSet(set: LockScreenSetDoc) {
+        viewModelScope.launch {
+            val res = syncRepository.deleteLockScreenSet(currentUserId, set.id)
+            if (res.isSuccess) {
+                _events.tryEmit("Removed set \"${set.name}\"")
+            }
+        }
+    }
+
     // --- Search & Filters ---
 
     fun updateSearchQuery(query: String) {
@@ -286,7 +310,7 @@ class BackdropViewModel(
                 when (state) {
                     is DownloadProgress.Completed -> {
                         val suffix = if (state.isDuplicateHandled) " (renamed to avoid duplicate)" else ""
-                        _events.tryEmit("Saved ${state.fileName} to Pictures/BACKDROP$suffix")
+                        _events.tryEmit("Saved ${state.fileName} to Pictures/Backdrops$suffix")
                     }
                     is DownloadProgress.Failed -> {
                         _events.tryEmit(state.message)
@@ -301,10 +325,14 @@ class BackdropViewModel(
         _downloadProgress.value = null
     }
 
-    fun applyWallpaper(wallpaper: Wallpaper, target: WallpaperTarget) {
+    fun applyWallpaper(
+        wallpaper: Wallpaper,
+        target: WallpaperTarget,
+        allowHomeParallax: Boolean = false
+    ) {
         viewModelScope.launch {
             _isApplyingWallpaper.value = true
-            val result = mediaService.applyWallpaper(wallpaper, target)
+            val result = mediaService.applyWallpaper(wallpaper, target, allowHomeParallax)
             _isApplyingWallpaper.value = false
             if (result.isSuccess) {
                 val label = when (target) {
@@ -319,10 +347,45 @@ class BackdropViewModel(
         }
     }
 
-    fun applyBitmapWallpaper(bitmap: android.graphics.Bitmap, target: WallpaperTarget) {
+    fun applyEditedWallpaper(
+        wallpaper: Wallpaper,
+        target: WallpaperTarget,
+        allowHomeParallax: Boolean = false,
+        transformBitmap: (Bitmap) -> Bitmap
+    ) {
         viewModelScope.launch {
             _isApplyingWallpaper.value = true
-            val result = mediaService.applyBitmapAsWallpaper(bitmap, target)
+            val source = mediaService.loadFullBitmap(wallpaper)
+            val result = if (source != null) {
+                val edited = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    transformBitmap(source)
+                }
+                mediaService.applyBitmapAsWallpaper(edited, target, allowHomeParallax)
+            } else {
+                Result.failure(IllegalStateException("Unable to decode wallpaper bitmap."))
+            }
+            _isApplyingWallpaper.value = false
+            if (result.isSuccess) {
+                val label = when (target) {
+                    WallpaperTarget.HOME -> "Home screen"
+                    WallpaperTarget.LOCK -> "Lock screen"
+                    WallpaperTarget.BOTH -> "Home & Lock screens"
+                }
+                _events.tryEmit("Applied customized canvas to $label")
+            } else {
+                _events.tryEmit("Failed to apply wallpaper: ${result.exceptionOrNull()?.localizedMessage}")
+            }
+        }
+    }
+
+    fun applyBitmapWallpaper(
+        bitmap: Bitmap,
+        target: WallpaperTarget,
+        allowHomeParallax: Boolean = false
+    ) {
+        viewModelScope.launch {
+            _isApplyingWallpaper.value = true
+            val result = mediaService.applyBitmapAsWallpaper(bitmap, target, allowHomeParallax)
             _isApplyingWallpaper.value = false
             if (result.isSuccess) {
                 val label = when (target) {
@@ -381,10 +444,34 @@ class BackdropViewModel(
         }
     }
 
+    fun setHapticFeedbackEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(hapticFeedbackEnabled = enabled) }
+        }
+    }
+
+    fun setReducedMotionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(reducedMotionEnabled = enabled) }
+        }
+    }
+
+    fun setGlassDepthIntensity(intensity: Float) {
+        val clamped = intensity.coerceIn(0.55f, 1.45f)
+        viewModelScope.launch {
+            syncRepository.updatePreferences(currentUserId) { it.copy(glassDepthIntensity = clamped) }
+        }
+    }
+
+    fun shuffleDiscovery() {
+        _discoverySeed.value += 1L
+    }
+
     fun refreshDiscovery(context: Context) {
         viewModelScope.launch {
             _isRefreshing.value = true
             _cacheBytes.value = BackdropImageLoader.getCacheSizeBytes(context)
+            _discoverySeed.value += 1L
             kotlinx.coroutines.delay(450)
             _isRefreshing.value = false
         }
@@ -402,44 +489,14 @@ class BackdropViewModel(
         }
     }
 
-    private fun logFirestoreFlowError(stream: String, error: Throwable) {
-        val firestoreError = generateSequence(error) { it.cause }
-            .filterIsInstance<FirebaseFirestoreException>()
-            .firstOrNull()
-        if (firestoreError == null && error is CancellationException) throw error
-        Log.w(TAG, "Firestore stream error ($stream)", firestoreError ?: error)
-    }
-
-    private fun unwrapFirestoreErrorMessage(stream: String, error: Throwable): String {
-        val firestoreError = generateSequence(error) { it.cause }
-            .filterIsInstance<FirebaseFirestoreException>()
-            .firstOrNull()
-        if (firestoreError == null && error is CancellationException) throw error
-        val root = firestoreError ?: error
-        Log.w(TAG, "Firestore stream error ($stream)", root)
-        return root.message ?: "Unable to load $stream"
-    }
-
     companion object {
-        private const val TAG = "BackdropVM"
-
-        fun provideFactory(
-            context: Context,
-            currentUserId: String,
-            isGuest: Boolean = false
-        ): ViewModelProvider.Factory = viewModelFactory {
+        fun provideFactory(context: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val appContext = context.applicationContext
-                val dataSource: UserSyncDataSource = if (isGuest) {
-                    GuestLocalUserStore(appContext)
-                } else {
-                    val databaseId = appContext.getString(R.string.firestore_database_id)
-                    UserSyncRepository(FirebaseFirestore.getInstance(databaseId))
-                }
                 BackdropViewModel(
-                    syncRepository = dataSource,
+                    syncRepository = GuestLocalUserStore(appContext),
                     mediaService = WallpaperMediaService(appContext),
-                    currentUserId = currentUserId
+                    currentUserId = GuestLocalUserStore.GUEST_USER_ID
                 )
             }
         }
